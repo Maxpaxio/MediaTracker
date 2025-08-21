@@ -1,6 +1,6 @@
 # tv_trackerios
 
-An application in which you can track TV Shows.
+An application in which you can track TV Shows in.
 
 ## Getting Started
 

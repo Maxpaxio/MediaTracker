@@ -1,9 +1,8 @@
 name: Deploy Flutter Web to GitHub Pages
-
 on:
   push:
-    branches: [ main ]   # deploy whenever main changes
-  workflow_dispatch:      # allow manual runs
+    branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,26 +17,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: Enable web and fetch deps
+      - name: Enable web & get deps
         run: |
           flutter config --enable-web
           flutter pub get
 
-      - name: Build Flutter Web (base-href must match repo name & case)
+      - name: Build (base-href must match repo name + case)
         run: |
           flutter build web --release --base-href "/TV-Tracker/"
-          # SPA refresh fix so deep links don't 404
           cp build/web/index.html build/web/404.html
 
-      - name: Upload build as Pages artifact
+      - name: Upload artifact for Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
