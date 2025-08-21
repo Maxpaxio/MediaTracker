@@ -1,6 +1,6 @@
 # tv_trackerios
 
-A new Flutter project.
+An application in which you can track TV Shows.
 
 ## Getting Started
 
