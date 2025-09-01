@@ -23,8 +23,11 @@ class SyncFileService extends ChangeNotifier {
   SyncEndpoint? get endpoint => _endpoint;
   DateTime? get lastSyncAt => _lastSyncAt;
   String? get endpointHost {
-    final url = _endpoint?.url;
-    if (url == null || url.isEmpty) return null;
+    final ep = _endpoint;
+    if (ep == null) return null;
+    if (ep.backend == SyncBackend.googleDrive) return 'Google Drive';
+    final url = ep.url;
+    if (url.isEmpty) return null;
     try {
       return Uri.parse(url).host;
     } catch (_) {
@@ -216,23 +219,58 @@ class SyncEndpoint {
   final String url; // full URL to the JSON file
   final String? username;
   final String? password;
+  // Google Drive fields
+  final String? googleAccessToken;
+  final int? googleExpiresAtMs; // epoch ms
+  final String? googleFileId; // resolved appDataFolder file id
+
   const SyncEndpoint.webdav({
     required this.url,
     this.username,
     this.password,
-  }) : backend = SyncBackend.webdav;
+  })  : backend = SyncBackend.webdav,
+        googleAccessToken = null,
+        googleExpiresAtMs = null,
+        googleFileId = null;
+
+  SyncEndpoint.googleDrive({
+    required String accessToken,
+    required DateTime expiresAt,
+    String? fileId,
+  })  : backend = SyncBackend.googleDrive,
+        url = '',
+        username = null,
+        password = null,
+        googleAccessToken = accessToken,
+        googleExpiresAtMs = expiresAt.millisecondsSinceEpoch,
+        googleFileId = fileId;
 
   Map<String, dynamic> toJson() => {
         'backend': backend.name,
         'url': url,
         'username': username,
         'password': password,
+  'googleAccessToken': googleAccessToken,
+  'googleExpiresAtMs': googleExpiresAtMs,
+  'googleFileId': googleFileId,
       };
 
   factory SyncEndpoint.fromJson(Map<String, dynamic> m) {
     final be = (m['backend'] as String?) ?? 'webdav';
     switch (be) {
+      case 'googleDrive':
+        return SyncEndpoint.googleDrive(
+          accessToken: (m['googleAccessToken'] as String?) ?? '',
+          expiresAt: DateTime.fromMillisecondsSinceEpoch(
+              (m['googleExpiresAtMs'] as num?)?.toInt() ?? 0),
+          fileId: m['googleFileId'] as String?,
+        );
       case 'webdav':
+        return SyncEndpoint.webdav(
+          url: (m['url'] as String?) ?? '',
+          username: m['username'] as String?,
+          password: m['password'] as String?,
+        );
       default:
         return SyncEndpoint.webdav(
           url: (m['url'] as String?) ?? '',
@@ -243,12 +281,15 @@ class SyncEndpoint {
   }
 }
 
-enum SyncBackend { webdav }
+enum SyncBackend { webdav, googleDrive }
 
 // --- WebDAV I/O ---
 extension on SyncFileService {
   Future<Map<String, dynamic>?> _readRemote() async {
     final ep = _endpoint!;
+    if (ep.backend == SyncBackend.googleDrive) {
+      return _gdRead(ep);
+    }
     if (ep.backend != SyncBackend.webdav) return null;
     final headers = <String, String>{'accept': 'application/json'};
     if (ep.username != null && ep.password != null) {
@@ -265,6 +306,10 @@ extension on SyncFileService {
 
   Future<void> _writeRemote(Map<String, dynamic> doc) async {
     final ep = _endpoint!;
+    if (ep.backend == SyncBackend.googleDrive) {
+      await _gdWrite(ep, doc);
+      return;
+    }
     if (ep.backend != SyncBackend.webdav) return;
     final headers = <String, String>{'content-type': 'application/json'};
     if (_etag != null) headers['if-match'] = _etag!;
@@ -275,6 +320,93 @@ extension on SyncFileService {
     final res = await http.put(Uri.parse(ep.url), headers: headers, body: jsonEncode(doc));
     if (res.statusCode >= 400) throw Exception('WebDAV write failed');
     _etag = res.headers['etag'] ?? _etag;
+  }
+}
+
+// --- Google Drive (appDataFolder) I/O ---
+extension _GoogleDrive on SyncFileService {
+  bool _gdExpired(SyncEndpoint ep) {
+    final ms = ep.googleExpiresAtMs ?? 0;
+    if (ms == 0) return true;
+    return DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(ms - 30 * 1000));
+  }
+
+  Future<String> _gdEnsureFileId(SyncEndpoint ep) async {
+    if ((ep.googleFileId ?? '').isNotEmpty) return ep.googleFileId!;
+    if (_gdExpired(ep)) throw Exception('Google token expired');
+    final token = ep.googleAccessToken!;
+    // List existing in appDataFolder by name
+    final listUri = Uri.parse('https://www.googleapis.com/drive/v3/files').replace(queryParameters: {
+      'spaces': 'appDataFolder',
+      'q': "name = 'tv_tracker_sync.json'",
+      'fields': 'files(id,name)',
+      'pageSize': '1',
+    });
+    final lr = await http.get(listUri, headers: {'authorization': 'Bearer $token'});
+    if (lr.statusCode == 401) throw Exception('Unauthorized');
+    if (lr.statusCode >= 400) throw Exception('Drive list failed');
+    final body = jsonDecode(utf8.decode(lr.bodyBytes)) as Map<String, dynamic>;
+    final files = (body['files'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    String fileId;
+    if (files.isNotEmpty) {
+      fileId = (files.first['id'] as String?) ?? '';
+    } else {
+      // Create metadata in appDataFolder
+      final mr = await http.post(
+        Uri.parse('https://www.googleapis.com/drive/v3/files').replace(queryParameters: {'fields': 'id'}),
+        headers: {
+          'authorization': 'Bearer $token',
+          'content-type': 'application/json',
+        },
+        body: jsonEncode({
+          'name': 'tv_tracker_sync.json',
+          'parents': ['appDataFolder'],
+        }),
+      );
+      if (mr.statusCode >= 400) throw Exception('Drive create failed');
+      fileId = ((jsonDecode(mr.body) as Map)['id'] as String?) ?? '';
+      // Initialize content
+      await _gdUpload(fileId, token, _toDoc(storage.all));
+    }
+    // Save back endpoint with fileId
+    final newEp = SyncEndpoint.googleDrive(
+      accessToken: token,
+      expiresAt: DateTime.fromMillisecondsSinceEpoch(ep.googleExpiresAtMs ?? 0),
+      fileId: fileId,
+    );
+    await setEndpoint(newEp);
+    return fileId;
+  }
+
+  Future<Map<String, dynamic>?> _gdRead(SyncEndpoint ep) async {
+    if (_gdExpired(ep)) throw Exception('Google token expired');
+    final token = ep.googleAccessToken!;
+    final fileId = await _gdEnsureFileId(ep);
+    final uri = Uri.parse('https://www.googleapis.com/drive/v3/files/$fileId').replace(queryParameters: {'alt': 'media'});
+    final r = await http.get(uri, headers: {'authorization': 'Bearer $token'});
+    if (r.statusCode == 404) return null;
+    if (r.statusCode >= 400) throw Exception('Drive read failed');
+    return jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+  }
+
+  Future<void> _gdWrite(SyncEndpoint ep, Map<String, dynamic> doc) async {
+    if (_gdExpired(ep)) throw Exception('Google token expired');
+    final token = ep.googleAccessToken!;
+    final fileId = await _gdEnsureFileId(ep);
+    await _gdUpload(fileId, token, doc);
+  }
+
+  Future<void> _gdUpload(String fileId, String token, Map<String, dynamic> doc) async {
+    final uri = Uri.parse('https://www.googleapis.com/upload/drive/v3/files/$fileId').replace(queryParameters: {
+      'uploadType': 'media',
+    });
+    final r = await http.patch(uri,
+        headers: {
+          'authorization': 'Bearer $token',
+          'content-type': 'application/json',
+        },
+        body: jsonEncode(doc));
+    if (r.statusCode >= 400) throw Exception('Drive upload failed');
   }
 }
 

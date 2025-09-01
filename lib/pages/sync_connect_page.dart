@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../services/sync_file_service.dart';
+import '../services/google_oauth.dart';
 
 class SyncConnectPage extends StatefulWidget {
   static const route = '/sync-connect';
@@ -60,6 +62,52 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
     }
   }
 
+  Future<void> _connectGoogle() async {
+    if (!kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Drive connect is supported on Web for now.')),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      // Use implicit flow with a small redirect helper page under /auth/google
+      const clientId =
+          '50733711904-jc6h65rtcku2k5srd0hr0fngmuvk9p15.apps.googleusercontent.com';
+      // Infer redirect from current origin to work both locally and on hosting
+      final origin = Uri.base.replace(path: '/auth/google', query: '', fragment: '');
+      final session = await googleSignInPkce(
+        clientId: clientId,
+        redirectUri: origin,
+        scopes: const ['https://www.googleapis.com/auth/drive.appdata'],
+      );
+      if (session == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sign-in canceled or failed.')),
+        );
+        return;
+      }
+
+      final sync = SyncScope.of(context);
+      await sync.setEndpoint(SyncEndpoint.googleDrive(
+        accessToken: session.accessToken,
+        expiresAt: session.expiresAt,
+      ));
+      final ok = await sync.pingAndInit();
+      if (ok) {
+        await sync.syncNow();
+        if (mounted) Navigator.pop(context);
+      } else if (mounted) {
+        await sync.disconnect();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to connect to Google Drive.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _importExistingFile() async {
     final sync = SyncScope.of(context);
     setState(() => _busy = true);
@@ -74,10 +122,23 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-    appBar: AppBar(title: const Text('Connect Storage (WebDAV)')),
+    appBar: AppBar(title: const Text('Connect Storage')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Text('Connect to a storage for live sync across devices.', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 16),
+          Text('Option 1: Google Drive (free, web only)', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: _busy ? null : _connectGoogle,
+            icon: const Icon(Icons.cloud),
+            label: const Text('Connect Google Drive'),
+          ),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text('Option 2: WebDAV URL', style: Theme.of(context).textTheme.titleSmall),
           const Text('Enter the full URL to your tv_tracker_sync.json on a storage that supports WebDAV (GET/PUT).'),
       const SizedBox(height: 8),
           const Text('No file yet? Create one from your current local library, upload it to your storage, then paste its WebDAV URL. Note: iCloud/Google Drive share links are typically read-only and won\'t work for live sync. Use Import/Export with those.'),
