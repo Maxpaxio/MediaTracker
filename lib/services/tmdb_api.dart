@@ -164,4 +164,108 @@ class TmdbApi {
       return name;
     }).toList(growable: false);
   }
+
+  // ---------------- MORE INFO (creators/companies/runtime) ----------------
+
+  /// Fetch extra details for the More Info page: creators, companies, runtimes, etc.
+  Future<({
+    List<String> creators,
+    List<({String name, String logoPath})> companies,
+    List<int> episodeRunTimes,
+    String firstAirDate,
+    double rating,
+    List<String> genres,
+  })> fetchShowExtras(int showId) async {
+    final uri = Uri.parse('$_base/tv/$showId').replace(
+      queryParameters: {
+        'api_key': _key,
+        'language': 'en-US',
+      },
+    );
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      return (
+        creators: const <String>[],
+        companies: const <({String name, String logoPath})>[],
+        episodeRunTimes: const <int>[],
+        firstAirDate: '',
+        rating: 0.0,
+        genres: const <String>[],
+      );
+    }
+
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    List<String> creators = ((m['created_by'] as List?) ?? const [])
+        .map((e) => (e as Map?)?['name'])
+        .whereType<String>()
+        .toList(growable: false);
+    final companies = ((m['production_companies'] as List?) ?? const [])
+        .map((e) => (e as Map?)?.cast<String, dynamic>() ?? const {})
+        .map<({String name, String logoPath})>((mm) => (
+              name: (mm['name'] as String?) ?? '—',
+              logoPath: (mm['logo_path'] as String?) ?? '',
+            ))
+        .toList(growable: false);
+    final runTimes = ((m['episode_run_time'] as List?) ?? const [])
+        .whereType<num>()
+        .map((n) => n.toInt())
+        .toList(growable: false);
+    final firstAir = (m['first_air_date'] as String?) ?? '';
+    final rating = (m['vote_average'] as num?)?.toDouble() ?? 0.0;
+    final genres = ((m['genres'] as List?) ?? const [])
+        .map((e) => (e as Map?)?['name'])
+        .whereType<String>()
+        .toList(growable: false);
+
+    return (
+      creators: creators,
+      companies: companies,
+      episodeRunTimes: runTimes,
+      firstAirDate: firstAir,
+      rating: rating,
+      genres: genres,
+    );
+  }
+
+  /// Fetch top aggregate cast (with episode counts and character names).
+  Future<List<Map<String, dynamic>>> fetchAggregateCast(int showId) async {
+    final uri = Uri.parse('$_base/tv/$showId/aggregate_credits').replace(
+      queryParameters: {
+        'api_key': _key,
+        'language': 'en-US',
+      },
+    );
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return const <Map<String, dynamic>>[];
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    final cast = (m['cast'] as List?) ?? const [];
+
+    List<Map<String, dynamic>> list = cast.map<Map<String, dynamic>>((e) {
+      final mm = (e as Map?)?.cast<String, dynamic>() ?? const {};
+      final name = (mm['name'] as String?) ?? '';
+      final profilePath = (mm['profile_path'] as String?) ?? '';
+      final roles = (mm['roles'] as List?) ?? const [];
+      int episodes = 0;
+      String character = '';
+      for (final r in roles) {
+        final rm = (r as Map?)?.cast<String, dynamic>() ?? const {};
+        episodes += (rm['episode_count'] as num?)?.toInt() ?? 0;
+        if (character.isEmpty) {
+          final c = (rm['character'] as String?) ?? '';
+          if (c.isNotEmpty) character = c;
+        }
+      }
+      return {
+        'name': name,
+        'profile_path': profilePath,
+        'character': character,
+        'episodes': episodes,
+      };
+    }).toList();
+
+    // Sort by episodes desc and take top 10
+    list.sort((a, b) => (b['episodes'] as int).compareTo(a['episodes'] as int));
+    if (list.length > 10) list = list.sublist(0, 10);
+    return list;
+  }
 }

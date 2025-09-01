@@ -55,6 +55,8 @@ class Show {
   final List<String> providers; // e.g. ["Disney+"]
   final List<Season> seasons;
   final WatchFlag flag;
+  final int addedAt; // epoch ms
+  final int updatedAt; // epoch ms
 
   const Show({
     required this.id,
@@ -69,6 +71,8 @@ class Show {
     required this.providers,
     required this.seasons,
     this.flag = WatchFlag.none,
+  required this.addedAt,
+  required this.updatedAt,
   });
 
   Show copyWith({
@@ -83,6 +87,8 @@ class Show {
     List<String>? providers,
     List<Season>? seasons,
     WatchFlag? flag,
+    int? addedAt,
+    int? updatedAt,
   }) {
     return Show(
       id: id,
@@ -97,6 +103,8 @@ class Show {
       providers: providers ?? this.providers,
       seasons: seasons ?? this.seasons,
       flag: flag ?? this.flag,
+      addedAt: addedAt ?? this.addedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -121,6 +129,8 @@ class Show {
         'providers': providers,
         'flag': flag.index,
         'seasons': seasons.map((e) => e.toJson()).toList(),
+  'addedAt': addedAt,
+  'updatedAt': updatedAt,
       };
 
   factory Show.fromJson(Map<String, dynamic> m) => Show(
@@ -136,6 +146,8 @@ class Show {
         providers: (m['providers'] as List).cast<String>(),
         flag: WatchFlag.values[m['flag']],
         seasons: (m['seasons'] as List).map((e) => Season.fromJson(e)).toList(),
+  addedAt: (m['addedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
+  updatedAt: (m['updatedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
       );
 }
 
@@ -163,6 +175,9 @@ class AppStorage extends ChangeNotifier {
   List<Show> get watchlist =>
       _shows.where((s) => s.isWatchlist && !s.isCompleted).toList();
 
+  /// All shows (unordered). Use display-time ordering in UI.
+  List<Show> get all => List.unmodifiable(_shows);
+
   Show byId(int id) => _shows.firstWhere((e) => e.id == id);
   Show? tryGet(int id) =>
       _shows.where((e) => e.id == id).cast<Show?>().firstOrNull;
@@ -174,7 +189,27 @@ class AppStorage extends ChangeNotifier {
   void ensureShow(Show show) {
     final idx = _shows.indexWhere((s) => s.id == show.id);
     if (idx != -1) return;
-    _shows.add(show);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final withTs = show.copyWith(
+      addedAt: show.addedAt,
+      updatedAt: now,
+    );
+    // If addedAt was not set meaningfully (e.g., 0), default to now.
+    final normalized = withTs.addedAt > 0 ? withTs : withTs.copyWith(addedAt: now);
+    _shows.add(normalized);
+    _persist();
+    notifyListeners();
+  }
+
+  /// Replace an existing show in place (preserves list order).
+  /// If the show doesn't exist yet, it will be appended.
+  void updateShow(Show show) {
+    final idx = _shows.indexWhere((s) => s.id == show.id);
+    if (idx == -1) {
+      _shows.add(show);
+    } else {
+      _shows[idx] = show;
+    }
     _persist();
     notifyListeners();
   }
@@ -189,18 +224,23 @@ class AppStorage extends ChangeNotifier {
       final reset = show.copyWith(
         flag: WatchFlag.watchlist,
         seasons: [for (final s in show.seasons) s.copyWith(watched: 0)],
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
       _shows.add(reset);
     } else {
       final current = _shows[idx];
       if (current.isWatchlist) {
         // Turn OFF watchlist
-        _shows[idx] = current.copyWith(flag: WatchFlag.none);
+        _shows[idx] = current.copyWith(
+          flag: WatchFlag.none,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        );
       } else {
         // Turn ON watchlist → reset progress + set flag watchlist
         final reset = current.copyWith(
           flag: WatchFlag.watchlist,
           seasons: [for (final s in current.seasons) s.copyWith(watched: 0)],
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
         );
         _shows[idx] = reset;
       }
@@ -222,6 +262,7 @@ class AppStorage extends ChangeNotifier {
     final newShow = base.copyWith(
       seasons: allDone,
       flag: WatchFlag.completed,
+  updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
     if (idx == -1) {
@@ -244,7 +285,10 @@ class AppStorage extends ChangeNotifier {
   void removeFromWatchlist(int showId) {
     final idx = _shows.indexWhere((s) => s.id == showId);
     if (idx == -1) return;
-    _shows[idx] = _shows[idx].copyWith(flag: WatchFlag.none);
+    _shows[idx] = _shows[idx].copyWith(
+      flag: WatchFlag.none,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
     _persist();
     notifyListeners();
   }
@@ -267,7 +311,10 @@ class AppStorage extends ChangeNotifier {
         if (s.seasonNumber == seasonNumber) s.copyWith(watched: watched) else s,
     ];
 
-    var updated = show.copyWith(seasons: newSeasons);
+    var updated = show.copyWith(
+      seasons: newSeasons,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
 
     // If there is now any progress, clear watchlist.
     if (updated.isWatchlist && updated.watchedEpisodes > 0) {
@@ -295,7 +342,8 @@ class AppStorage extends ChangeNotifier {
       return;
     }
     // Seed demo so UI looks right on first run
-    _shows.addAll([
+  final now = DateTime.now().millisecondsSinceEpoch;
+  _shows.addAll([
       Show(
         id: 1,
         title: 'Bluey',
@@ -316,9 +364,22 @@ class AppStorage extends ChangeNotifier {
           Season(seasonNumber: 3, name: 'Season 3', episodeCount: 49),
         ],
         flag: WatchFlag.watchlist,
+    addedAt: now,
+    updatedAt: now,
       ),
     ]);
     _persist();
+  }
+}
+
+extension AppStorageAdmin on AppStorage {
+  /// Replace all shows with the provided list; persists and notifies.
+  void replaceAll(List<Show> items) {
+    _shows
+      ..clear()
+      ..addAll(items);
+    _persist();
+    notifyListeners();
   }
 }
 

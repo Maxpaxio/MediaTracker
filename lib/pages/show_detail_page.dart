@@ -111,8 +111,8 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
         seasons: mergedSeasons,
       );
 
-      storage.removeShow(showId);
-      storage.ensureShow(merged);
+  // Preserve ordering: update in place
+  storage.updateShow(merged);
     } catch (_) {
       // ignore network errors
     }
@@ -688,8 +688,8 @@ class _AddMenu extends StatelessWidget {
                   for (final ss in cur.seasons) ss.copyWith(watched: 0)
                 ],
               );
-              storage.removeFromCompleted(showId); // remove entry
-              storage.ensureShow(reset); // re-add unflagged
+              // Preserve list position: update in place instead of remove+re-add
+              storage.updateShow(reset);
             }
             break;
         }

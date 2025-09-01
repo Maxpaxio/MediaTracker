@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/storage.dart';
 import '../services/show_search_controller.dart';
 import '../services/tmdb_api.dart'; // NEW: to fetch provider logos
+import '../services/sync_file_service.dart';
+import 'sync_connect_page.dart';
 import '../widgets/section_title.dart';
 import '../widgets/watchlist_poster.dart';
 import '../widgets/completed_poster.dart';
@@ -60,9 +62,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final storage = StorageScope.of(context);
-    final ongoing = storage.ongoing;
-    final completed = storage.completed;
-    final watchlist = storage.watchlist;
+  // Show newest-added first by reversing the lists at display time
+  final ongoing = List<Show>.from(storage.ongoing.reversed);
+  final completed = List<Show>.from(storage.completed.reversed);
+  final watchlist = List<Show>.from(storage.watchlist.reversed);
 
     final hasQuery = search.text.text.isNotEmpty;
 
@@ -75,7 +78,34 @@ class _HomePageState extends State<HomePage> {
         return true;
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('TV Tracker')),
+        appBar: AppBar(
+          title: const Text('TV Tracker'),
+          actions: [
+            Builder(builder: (context) {
+              final sync = SyncScope.of(context);
+              final color = switch (sync.state) {
+                SyncFileState.disconnected => Colors.white54,
+                SyncFileState.idle => Colors.lightGreenAccent,
+                SyncFileState.syncing => Colors.amberAccent,
+                SyncFileState.error => Colors.redAccent,
+              };
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.circle, size: 10, color: color),
+              );
+            }),
+            IconButton(
+              tooltip: 'Sync now',
+              onPressed: () => SyncScope.of(context).syncNow(),
+              icon: const Icon(Icons.sync),
+            ),
+            IconButton(
+              tooltip: 'Connect storage',
+              onPressed: () => Navigator.pushNamed(context, SyncConnectPage.route),
+              icon: const Icon(Icons.cloud),
+            ),
+          ],
+        ),
         body: CustomScrollView(
           slivers: [
             // Search bar always on top
@@ -154,7 +184,10 @@ class _HomePageState extends State<HomePage> {
                           itemCount: ongoing.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(width: 12),
-                          itemBuilder: (_, i) => _OngoingCard(show: ongoing[i]),
+                          itemBuilder: (_, i) => _OngoingCard(
+                            key: ValueKey('ongoing-${ongoing[i].id}'),
+                            show: ongoing[i],
+                          ),
                         ),
                 ),
               ),
@@ -184,6 +217,7 @@ class _HomePageState extends State<HomePage> {
                           separatorBuilder: (_, __) =>
                               const SizedBox(width: 12),
                           itemBuilder: (_, i) => GestureDetector(
+                            key: ValueKey('completed-${completed[i].id}'),
                             onTap: () => Navigator.pushNamed(
                               context,
                               ShowDetailPage.route,
@@ -221,6 +255,7 @@ class _HomePageState extends State<HomePage> {
                           separatorBuilder: (_, __) =>
                               const SizedBox(width: 12),
                           itemBuilder: (_, i) => GestureDetector(
+                            key: ValueKey('watchlist-${watchlist[i].id}'),
                             onTap: () => Navigator.pushNamed(
                               context,
                               ShowDetailPage.route,
@@ -245,7 +280,7 @@ class _HomePageState extends State<HomePage> {
 /// Ongoing card with provider **logos from TMDb** (same as details), placed under title.
 /// Ongoing card with provider **logos from TMDb** (same as details), placed under title.
 class _OngoingCard extends StatelessWidget {
-  const _OngoingCard({required this.show});
+  const _OngoingCard({super.key, required this.show});
   final Show show;
 
   @override

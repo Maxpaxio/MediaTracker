@@ -84,6 +84,18 @@ class _ProviderCornerGridState extends State<_ProviderCornerGrid> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant _ProviderCornerGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showId != widget.showId) {
+      setState(() {
+        _loading = true;
+        _logos = const [];
+      });
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     try {
       final res = await _api.fetchWatchProviders(widget.showId, region: 'SE');
