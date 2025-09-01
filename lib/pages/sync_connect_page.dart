@@ -36,8 +36,9 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
       await sync.syncNow();
       if (mounted) Navigator.pop(context);
     } else if (mounted) {
+      await sync.disconnect(); // revert to disconnected if connect fails
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to connect. Check URL/credentials.')),
+        const SnackBar(content: Text('Failed to connect. Use a WebDAV URL that allows GET/PUT. For iCloud/Drive share links, use Import/Export instead.')),
       );
     }
     if (mounted) setState(() => _busy = false);
@@ -77,9 +78,9 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-      const Text('Enter the full URL to your tv_tracker_sync.json on your storage (WebDAV).'),
+          const Text('Enter the full URL to your tv_tracker_sync.json on a storage that supports WebDAV (GET/PUT).'),
       const SizedBox(height: 8),
-      const Text('No file yet? Create one from your current local library, upload it anywhere you prefer (iCloud/Drive/OneDrive/WebDAV), then paste its URL here.'),
+          const Text('No file yet? Create one from your current local library, upload it to your storage, then paste its WebDAV URL. Note: iCloud/Google Drive share links are typically read-only and won\'t work for live sync. Use Import/Export with those.'),
           const SizedBox(height: 8),
           TextField(
             controller: _url,

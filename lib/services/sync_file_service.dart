@@ -140,11 +140,14 @@ class SyncFileService extends ChangeNotifier {
     final m = await pickJsonFile();
     if (m == null) return false;
     try {
-      final items = _fromDoc(m);
-      storage.replaceAll(items);
+      // Merge imported (as remote) with current local
+      final localDoc = _toDoc(storage.all);
+      final mergedDoc = _merge(m, localDoc);
+      final mergedItems = _fromDoc(mergedDoc);
+      storage.replaceAll(mergedItems);
       if (_endpoint != null) {
-        // Push imported doc to remote
-        await _writeRemote(_toDoc(items));
+        // Push merged doc to remote
+        await _writeRemote(mergedDoc);
       }
       return true;
     } catch (_) {
