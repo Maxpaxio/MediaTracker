@@ -74,8 +74,8 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
       // Use implicit flow with a small redirect helper page under /auth/google
       const clientId =
           '50733711904-jc6h65rtcku2k5srd0hr0fngmuvk9p15.apps.googleusercontent.com';
-      // Infer redirect from current origin to work both locally and on hosting
-      final origin = Uri.base.replace(path: '/auth/google', query: '', fragment: '');
+  // Build redirect relative to current base path (works for GitHub Pages /TV-Tracker/)
+  final origin = Uri.base.resolve('auth/google').replace(query: '', fragment: '');
       final session = await googleSignInPkce(
         clientId: clientId,
         redirectUri: origin,
