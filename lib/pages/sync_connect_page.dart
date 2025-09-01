@@ -74,11 +74,9 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
       // Use implicit flow with a small redirect helper page under /auth/google
       const clientId =
           '50733711904-jc6h65rtcku2k5srd0hr0fngmuvk9p15.apps.googleusercontent.com';
-  // Build redirect relative to current base path (works for GitHub Pages /TV-Tracker/)
-  final origin = Uri.base.resolve('auth/google').replace(query: '', fragment: '');
       final session = await googleSignInPkce(
         clientId: clientId,
-        redirectUri: origin,
+  redirectUri: Uri(), // unused with GIS token client
         scopes: const ['https://www.googleapis.com/auth/drive.appdata'],
       );
       if (session == null) {
