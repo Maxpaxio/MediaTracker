@@ -1,77 +1,16 @@
 import 'package:flutter/material.dart';
-import '../services/storage.dart';
 import '../services/tmdb_api.dart';
 
-class WatchlistPoster extends StatelessWidget {
-  const WatchlistPoster({super.key, required this.show});
-  final Show show;
-
-  @override
-  Widget build(BuildContext context) {
-    const double posterWidth = 120;
-    const double cornerPad = 8;
-    const double iconSize = 28; // match completed check size
-    const Color badgeColor = Color(0xFFFACC15); // watchlist yellow
-
-    return SizedBox(
-      width: posterWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Poster with overlays
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: AspectRatio(
-                  aspectRatio: 2 / 3,
-                  child: Image.network(
-                    show.posterUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: const Color(0xFF2C2C32),
-                      child: const Icon(Icons.broken_image),
-                    ),
-                  ),
-                ),
-              ),
-
-              // State icon at top-right
-              Positioned(
-                right: cornerPad,
-                top: cornerPad,
-                child: const Icon(
-                  Icons.bookmark,
-                  size: iconSize,
-                  color: badgeColor,
-                ),
-              ),
-
-              // Provider logos 2x2 at top-left
-              Positioned(
-                left: cornerPad,
-                top: cornerPad,
-                child: _ProviderCornerGrid(showId: show.id),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(show.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProviderCornerGrid extends StatefulWidget {
-  const _ProviderCornerGrid({required this.showId});
+class ProviderCornerGrid extends StatefulWidget {
+  const ProviderCornerGrid({super.key, required this.showId, this.size = 28});
   final int showId;
+  final double size; // badge size (match checkmark/bookmark)
 
   @override
-  State<_ProviderCornerGrid> createState() => _ProviderCornerGridState();
+  State<ProviderCornerGrid> createState() => _ProviderCornerGridState();
 }
 
-class _ProviderCornerGridState extends State<_ProviderCornerGrid> {
+class _ProviderCornerGridState extends State<ProviderCornerGrid> {
   static const _imgBase = 'https://image.tmdb.org/t/p';
   final _api = TmdbApi();
 
@@ -99,12 +38,12 @@ class _ProviderCornerGridState extends State<_ProviderCornerGrid> {
     }
   }
 
-  Widget _placeholder(double size) => Container(
-        width: size,
-        height: size,
+  Widget _placeholder(double s) => Container(
+        width: s,
+        height: s,
         decoration: BoxDecoration(
           color: const Color(0xCC2F2F35),
-          borderRadius: BorderRadius.circular(size * 0.18),
+          borderRadius: BorderRadius.circular(s * 0.18),
         ),
       );
 
@@ -115,7 +54,7 @@ class _ProviderCornerGridState extends State<_ProviderCornerGrid> {
     }
 
     const cols = 2;
-    const size = 28.0; // match state icon
+    final size = widget.size;
     const gap = 4.0;
     final rows = (((_logos.length + cols - 1) ~/ cols)).clamp(1, 2);
     final gridWidth = cols * size + (cols - 1) * gap;

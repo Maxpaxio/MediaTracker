@@ -1,80 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'models/show_models.dart';
-import 'pages/home_page.dart';
 import 'theme.dart';
-import 'dart:convert';
+import 'services/storage.dart';
+import 'pages/home_page.dart';
+import 'pages/all_completed_page.dart';
+import 'pages/all_ongoing_page.dart';
+import 'pages/all_watchlist_page.dart';
+import 'pages/show_detail_page.dart';
+import 'pages/subpages/more_info_page.dart';
 
-void main() {
-  runApp(const TvTrackerApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final storage = AppStorage();
+  await storage.init();
+  runApp(MediaTrackerApp(storage: storage));
 }
 
-class TvTrackerApp extends StatefulWidget {
-  const TvTrackerApp({super.key});
-  @override
-  State<TvTrackerApp> createState() => _TvTrackerAppState();
-}
-
-class _TvTrackerAppState extends State<TvTrackerApp> {
-  final List<Show> trackedShows = [];
-  int? expandedShowId;
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTrackedShows();
-  }
-
-  Future<void> _loadTrackedShows() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('trackedShows');
-    if (raw != null && raw.isNotEmpty) {
-      try {
-        final list = (jsonDecode(raw) as List<dynamic>)
-            .map((m) => Show.fromJson(m as Map<String, dynamic>))
-            .toList();
-        trackedShows
-          ..clear()
-          ..addAll(list);
-      } catch (_) {}
-    }
-    setState(() => _loaded = true);
-  }
-
-  Future<void> _saveTrackedShows() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonList = trackedShows.map((s) => s.toJson()).toList();
-    await prefs.setString('trackedShows', jsonEncode(jsonList));
-  }
-
-  void _onTrackedShowsChanged() {
-    setState(() {});
-    _saveTrackedShows();
-  }
+class MediaTrackerApp extends StatelessWidget {
+  const MediaTrackerApp({super.key, required this.storage});
+  final AppStorage storage;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'TV Tracker',
-      theme: lightTheme,
-      darkTheme: darkTheme,        // dark gray theme
-      themeMode: ThemeMode.dark,   // force dark mode (change to system if you prefer)
-      home: _loaded
-          ? HomePage(
-              trackedShows: trackedShows,
-              expandedShowId: expandedShowId,
-              onExpandedChanged: (id) {
-                setState(() {
-                  expandedShowId = (expandedShowId == id) ? null : id;
-                });
-                _saveTrackedShows();
-              },
-              onTrackedShowsChanged: _onTrackedShowsChanged,
-            )
-          : const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            ),
+    return StorageScope(
+      storage: storage,
+      child: MaterialApp(
+        title: 'TV Tracker',
+        debugShowCheckedModeBanner: false,
+        theme: buildDarkTheme(),
+        routes: {
+          '/': (_) => const HomePage(),
+          AllOngoingPage.route: (_) => const AllOngoingPage(),
+          AllCompletedPage.route: (_) => const AllCompletedPage(),
+          AllWatchlistPage.route: (_) => const AllWatchlistPage(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == ShowDetailPage.route) {
+            return MaterialPageRoute(
+              builder: (_) => const ShowDetailPage(), // ✅ no args param
+              settings:
+                  settings, // ✅ keep settings so arguments are available inside
+            );
+          }
+
+          if (settings.name == MoreInfoPage.route) {
+            final id = settings.arguments as int;
+            return MaterialPageRoute(builder: (_) => MoreInfoPage(showId: id));
+          }
+          return null;
+        },
+      ),
     );
   }
 }

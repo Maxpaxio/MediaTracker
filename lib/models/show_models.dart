@@ -1,119 +1,125 @@
-class Show {
-  int tmdbId;
-  String title;
-  List<Season> seasons;
-  String? posterUrl;
-  String? platformLogoUrl;
-  bool isWatchlisted;
+// lib/models/show_models.dart
 
-  Show({
-    required this.tmdbId,
-    required this.title,
-    required this.seasons,
-    this.posterUrl,
-    this.platformLogoUrl,
-    this.isWatchlisted = false,
-  });
+/// Lightweight episode used in season lists.
+class EpisodeLite {
+  final int number;
+  final String name;
 
-  // Empty placeholder used when no existing show is found
-  factory Show.empty() => Show(tmdbId: -1, title: "", seasons: []);
-
-  /// ✅ All episodes watched?
-  bool get allWatched =>
-      seasons.isNotEmpty &&
-      seasons.every((s) => s.episodes.every((e) => e.watched));
-
-  /// ✅ Any episode watched?
-  bool get anyWatched =>
-      seasons.any((s) => s.episodes.any((e) => e.watched));
-
-  /// ✅ Progress as fraction [0.0–1.0]
-  double get progress {
-    final totalEpisodes = seasons.fold<int>(
-        0, (sum, season) => sum + season.episodes.length);
-    if (totalEpisodes == 0) return 0.0;
-
-    final watchedEpisodes = seasons.fold<int>(
-        0,
-        (sum, season) =>
-            sum + season.episodes.where((e) => e.watched).length);
-    return watchedEpisodes / totalEpisodes;
-  }
-
-  /// ✅ Serialize to JSON
-  Map<String, dynamic> toJson() {
-    return {
-      'tmdbId': tmdbId,
-      'title': title,
-      'posterUrl': posterUrl,
-      'platformLogoUrl': platformLogoUrl,
-      'isWatchlisted': isWatchlisted,
-      'seasons': seasons.map((s) => s.toJson()).toList(),
-    };
-  }
-
-  /// ✅ Deserialize from JSON
-  factory Show.fromJson(Map<String, dynamic> json) {
-    return Show(
-      tmdbId: json['tmdbId'] ?? -1,
-      title: json['title'] ?? "",
-      posterUrl: json['posterUrl'],
-      platformLogoUrl: json['platformLogoUrl'],
-      isWatchlisted: json['isWatchlisted'] ?? false,
-      seasons: (json['seasons'] as List<dynamic>? ?? [])
-          .map((s) => Season.fromJson(s as Map<String, dynamic>))
-          .toList(),
-    );
-  }
-}
-
-class Season {
-  int number;
-  List<Episode> episodes;
-
-  Season({required this.number, required this.episodes});
-
-  Map<String, dynamic> toJson() {
-    return {
-      'number': number,
-      'episodes': episodes.map((e) => e.toJson()).toList(),
-    };
-  }
-
-  factory Season.fromJson(Map<String, dynamic> json) {
-    return Season(
-      number: json['number'] ?? 0,
-      episodes: (json['episodes'] as List<dynamic>? ?? [])
-          .map((e) => Episode.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    );
-  }
-}
-
-class Episode {
-  int number;
-  String title;
-  bool watched;
-
-  Episode({
+  const EpisodeLite({
     required this.number,
-    required this.title,
-    this.watched = false,
+    required this.name,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'number': number,
-      'title': title,
-      'watched': watched,
-    };
-  }
+  EpisodeLite copyWith({int? number, String? name}) =>
+      EpisodeLite(number: number ?? this.number, name: name ?? this.name);
+}
 
-  factory Episode.fromJson(Map<String, dynamic> json) {
-    return Episode(
-      number: json['number'] ?? 0,
-      title: json['title'] ?? "",
-      watched: json['watched'] ?? false,
+/// A single TV season with progress.
+class Season {
+  final int seasonNumber;
+  final String name;
+  final int episodeCount;
+  final int watched; // number of episodes marked watched (0..episodeCount)
+
+  const Season({
+    required this.seasonNumber,
+    required this.name,
+    required this.episodeCount,
+    required this.watched,
+  });
+
+  double get progress =>
+      episodeCount == 0 ? 0.0 : (watched.clamp(0, episodeCount) / episodeCount);
+
+  Season copyWith({
+    int? seasonNumber,
+    String? name,
+    int? episodeCount,
+    int? watched,
+  }) {
+    return Season(
+      seasonNumber: seasonNumber ?? this.seasonNumber,
+      name: name ?? this.name,
+      episodeCount: episodeCount ?? this.episodeCount,
+      watched: watched ?? this.watched,
+    );
+  }
+}
+
+/// Main show entity as used across the app.
+/// Includes optional hero metadata and computed totals.
+class Show {
+  final int id;
+  final String title;
+  final String overview;
+  final String posterUrl;
+  final String backdropUrl;
+  final List<Season> seasons;
+
+  // Optional metadata for hero / info pages:
+  final String? firstAirDate; // e.g., "2016-07-15"
+  final String? lastAirDate; // e.g., "2024-11-10"
+  final List<String> genres; // e.g., ["Drama", "Sci-Fi & Fantasy"]
+  final double? rating; // TMDB vote_average (0..10)
+
+  // Tracking flags.
+  final bool isWatchlist;
+  final bool isCompleted;
+
+  const Show({
+    required this.id,
+    required this.title,
+    required this.overview,
+    required this.posterUrl,
+    required this.backdropUrl,
+    required this.seasons,
+    this.firstAirDate,
+    this.lastAirDate,
+    this.genres = const [],
+    this.rating,
+    this.isWatchlist = false,
+    this.isCompleted = false,
+  });
+
+  /// Total episodes across all seasons.
+  int get totalEpisodes =>
+      seasons.fold<int>(0, (sum, s) => sum + s.episodeCount);
+
+  /// Total watched episodes across all seasons.
+  int get watchedEpisodes => seasons.fold<int>(
+      0, (sum, s) => sum + s.watched.clamp(0, s.episodeCount));
+
+  /// Overall progress 0.0–1.0 (safe if total is 0).
+  double get progress =>
+      totalEpisodes == 0 ? 0.0 : (watchedEpisodes / totalEpisodes);
+
+  Show copyWith({
+    int? id,
+    String? title,
+    String? overview,
+    String? posterUrl,
+    String? backdropUrl,
+    List<Season>? seasons,
+    String? firstAirDate,
+    String? lastAirDate,
+    List<String>? genres,
+    double? rating,
+    bool? isWatchlist,
+    bool? isCompleted,
+  }) {
+    return Show(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      overview: overview ?? this.overview,
+      posterUrl: posterUrl ?? this.posterUrl,
+      backdropUrl: backdropUrl ?? this.backdropUrl,
+      seasons: seasons ?? this.seasons,
+      firstAirDate: firstAirDate ?? this.firstAirDate,
+      lastAirDate: lastAirDate ?? this.lastAirDate,
+      genres: genres ?? this.genres,
+      rating: rating ?? this.rating,
+      isWatchlist: isWatchlist ?? this.isWatchlist,
+      isCompleted: isCompleted ?? this.isCompleted,
     );
   }
 }

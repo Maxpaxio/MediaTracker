@@ -1,94 +1,160 @@
 import 'package:flutter/material.dart';
-import '../models/show_models.dart';
-import '../pages/show_detail_page.dart';
+import '../services/storage.dart';
+import '../services/tmdb_api.dart';
 
 class CompletedPoster extends StatelessWidget {
+  const CompletedPoster({super.key, required this.show});
   final Show show;
-  final String apiKey;
-  final String region;
-  final List<Show> trackedShows;
-  final VoidCallback onTrackedShowsChanged;
-
-  /// Optional fixed width for horizontal rows; leave null in grid pages.
-  final double? width;
-
-  const CompletedPoster({
-    super.key,
-    required this.show,
-    required this.apiKey,
-    required this.region,
-    required this.trackedShows,
-    required this.onTrackedShowsChanged,
-    this.width,
-  });
 
   @override
   Widget build(BuildContext context) {
-    final card = Column(
-      children: [
-        Expanded(
-          child: Stack(
+    const double posterWidth = 120;
+    const double cornerPad = 8;
+    const double checkSize = 28; // slightly larger checkmark
+
+    return SizedBox(
+      width: posterWidth,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Poster with overlays
+          Stack(
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(14),
                 child: AspectRatio(
                   aspectRatio: 2 / 3,
                   child: Image.network(
-                    show.posterUrl ?? "",
+                    show.posterUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        Container(color: Colors.grey.shade700),
+                    errorBuilder: (_, __, ___) => Container(
+                      color: const Color(0xFF2C2C32),
+                      child: const Icon(Icons.broken_image),
+                    ),
                   ),
                 ),
               ),
-              if (show.platformLogoUrl != null)
-                Positioned(
-                  top: 4,
-                  left: 4,
-                  child: Image.network(show.platformLogoUrl!,
-                      width: 20, height: 20),
+
+              // Bigger checkmark at top-right
+              Positioned(
+                right: cornerPad,
+                top: cornerPad,
+                child: const Icon(
+                  Icons.check_circle,
+                  size: checkSize,
+                  color: Color(0xFF6EE7B7),
                 ),
-              const Positioned(
-                top: 4,
-                right: 4,
-                child: Icon(Icons.check_circle,
-                    color: Colors.green, size: 20),
+              ),
+
+              // Provider logos grid (4x4) at top-left, same row as checkmark
+              Positioned(
+                left: cornerPad,
+                top: cornerPad,
+                child: _ProviderCornerGrid(showId: show.id),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 4),
-        // 🔒 Force single-line ellipsis under poster width
-        Text(
-          show.title,
-          style: const TextStyle(fontSize: 12),
-          maxLines: 1,
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+          const SizedBox(height: 8),
+          Text(show.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      ),
     );
+  }
+}
 
-    final content = width != null
-        ? SizedBox(width: width, child: card)
-        : card;
+class _ProviderCornerGrid extends StatefulWidget {
+  const _ProviderCornerGrid({required this.showId});
+  final int showId;
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ShowDetailPage(
-              showId: show.tmdbId,
-              apiKey: apiKey,
-              region: region,
-              trackedShows: trackedShows,
-              onTrackedShowsChanged: onTrackedShowsChanged,
-            ),
-          ),
-        );
-      },
-      child: content,
+  @override
+  State<_ProviderCornerGrid> createState() => _ProviderCornerGridState();
+}
+
+class _ProviderCornerGridState extends State<_ProviderCornerGrid> {
+  static const _imgBase = 'https://image.tmdb.org/t/p';
+  final _api = TmdbApi();
+
+  List<Map<String, dynamic>> _logos = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await _api.fetchWatchProviders(widget.showId, region: 'SE');
+      final combined = <Map<String, dynamic>>[...res.streaming, ...res.rentBuy];
+      if (!mounted) return;
+      setState(() {
+        _logos = combined.take(4).toList(growable: false); // 2x2 max
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  Widget _placeholder(double size) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: const Color(0xCC2F2F35),
+          borderRadius: BorderRadius.circular(size * 0.18),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _logos.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // 2x2 grid to match checkmark size visually
+    const cols = 2;
+    const size = 28.0; // ~ same as checkmark
+    const gap = 4.0;
+    final rows = (((_logos.length + cols - 1) ~/ cols)).clamp(1, 2);
+    final gridWidth = cols * size + (cols - 1) * gap;
+    final gridHeight = rows * size + (rows - 1) * gap;
+
+    final badges = _logos.map((m) {
+      final logoPath = (m['logo_path'] as String?) ?? '';
+      if (logoPath.isEmpty) return _placeholder(size);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.18),
+        child: Image.network(
+          '$_imgBase/w92$logoPath',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => _placeholder(size),
+        ),
+      );
+    }).toList();
+
+    return Container(
+      width: gridWidth,
+      height: gridHeight,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(3),
+        itemCount: badges.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: cols,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
+          childAspectRatio: 1,
+        ),
+        itemBuilder: (_, i) => badges[i],
+      ),
     );
   }
 }

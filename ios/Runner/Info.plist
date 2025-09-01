@@ -47,3 +47,28 @@
 	</array>
 </dict>
 </plist>
+<key>LSApplicationQueriesSchemes</key>
+<array>
+  <!-- existing ones you likely already had -->
+  <string>nflx</string>
+  <string>disneyplus</string>
+  <string>hbomax</string>
+  <string>primevideo</string>
+  <string>tv</string>
+  <string>viaplay</string>
+  <string>vnd.youtube</string>
+  <string>hulu</string>
+  <string>paramountplus</string>
+  <string>peacock</string>
+  <string>market</string>
+  <string>itms</string>
+
+  <!-- new additions -->
+  <string>skyshowtime</string>
+  <string>svtplay</string>
+  <string>tele2play</string>
+  <string>tv4play</string>
+  <string>sfanytime</string>
+  <string>aiv</string>
+  <string>britbox</string>
+</array>

@@ -1,0 +1,4 @@
+{
+  // Point VS Code Dart/Flutter extension to the project-bundled Flutter SDK
+  "dart.flutterSdkPath": "/workspaces/tv_trackerios/flutter"
+}

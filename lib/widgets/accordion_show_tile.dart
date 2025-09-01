@@ -1,135 +1,70 @@
 import 'package:flutter/material.dart';
-import '../models/show_models.dart';
+import '../services/storage.dart';
 import '../pages/show_detail_page.dart';
 
 class AccordionShowTile extends StatelessWidget {
+  const AccordionShowTile({super.key, required this.show, this.trailing});
   final Show show;
-  final bool isExpanded;
-  final VoidCallback onExpand;
-  final VoidCallback onChanged;
-  final String apiKey;
-  final String region;
-  final List<Show> trackedShowsRef;
-
-  const AccordionShowTile({
-    super.key,
-    required this.show,
-    required this.isExpanded,
-    required this.onExpand,
-    required this.onChanged,
-    required this.apiKey,
-    required this.region,
-    required this.trackedShowsRef,
-  });
-
-  void _maybeClearWatchlist() {
-    // If any episode is watched, it should no longer be on the watchlist
-    if (show.anyWatched && show.isWatchlisted) {
-      show.isWatchlisted = false;
-    }
-  }
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ListTile(
-          leading: GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ShowDetailPage(
-                    showId: show.tmdbId,
-                    apiKey: apiKey,
-                    region: region,
-                    trackedShows: trackedShowsRef,
-                    onTrackedShowsChanged: onChanged,
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.pushNamed(
+          context,
+          ShowDetailPage.route,
+          arguments: ShowDetailArgs(showId: show.id),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  show.posterUrl,
+                  height: 80,
+                  width: 56,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 80,
+                    width: 56,
+                    color: const Color(0xFF2C2C32),
+                    child: const Icon(Icons.broken_image),
                   ),
                 ),
-              );
-            },
-            child: SizedBox(
-              width: 60,
-              height: 90, // 2:3 portrait
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: show.posterUrl != null
-                    ? Image.network(show.posterUrl!, fit: BoxFit.cover)
-                    : Container(color: Colors.grey.shade700),
               ),
-            ),
-          ),
-          title: Row(
-            children: [
-              Flexible(
-                child: Text(
-                  show.title,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (show.platformLogoUrl != null) ...[
-                const SizedBox(width: 6),
-                Image.network(show.platformLogoUrl!, width: 16, height: 16),
-              ],
-            ],
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LinearProgressIndicator(
-                value: show.progress,
-                minHeight: 4,
-              ),
-              const SizedBox(height: 3),
-              Text("${(show.progress * 100).toStringAsFixed(0)}%",
-                  style: const TextStyle(fontSize: 12)),
-            ],
-          ),
-          onTap: onExpand,
-        ),
-        if (isExpanded)
-          Column(
-            children: show.seasons.map((season) {
-              final allWatched = season.episodes.every((e) => e.watched);
-              return ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-                title: Row(
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: Text("Season ${season.number}")),
-                    Checkbox(
-                      value: allWatched,
-                      onChanged: (val) {
-                        // Toggle entire season
-                        for (final ep in season.episodes) {
-                          ep.watched = val ?? false;
-                        }
-                        _maybeClearWatchlist();
-                        onChanged();
-                      },
+                    Text(
+                      show.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(value: show.progress),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Watched ${show.watchedEpisodes} / ${show.totalEpisodes}  (${(show.progress * 100).round()}%)',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
-                children: season.episodes.map((ep) {
-                  return CheckboxListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text("Ep ${ep.number}. ${ep.title}",
-                        overflow: TextOverflow.ellipsis),
-                    value: ep.watched,
-                    onChanged: (val) {
-                      ep.watched = val ?? false;
-                      _maybeClearWatchlist();
-                      onChanged();
-                    },
-                  );
-                }).toList(),
-              );
-            }).toList(),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }

@@ -1,19 +1,37 @@
 {
   "version": "0.2.0",
   "configurations": [
+    
     {
-      "name": "Run iOS Simulator",
-      "request": "launch",
+      "name": "Flutter Web Server (Debug)",
       "type": "dart",
+      "request": "launch",
       "program": "lib/main.dart",
-      "args": ["-d", "ios"]
+      "deviceId": "web-server",
+      "toolArgs": ["--web-hostname", "0.0.0.0", "--web-port", "8080"]
+    },
+    {
+      "name": "Flutter Web Server (Release)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "deviceId": "web-server",
+      "flutterMode": "release",
+      "toolArgs": ["--web-hostname", "0.0.0.0", "--web-port", "8080"]
     },
     {
       "name": "Run Chrome (Web)",
-      "request": "launch",
       "type": "dart",
+      "request": "launch",
       "program": "lib/main.dart",
-      "args": ["-d", "chrome"]
+      "deviceId": "chrome"
+    },
+    {
+      "name": "Run iOS Simulator",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "deviceId": "ios"
     }
   ]
 }
