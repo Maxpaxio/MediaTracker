@@ -97,8 +97,9 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
         if (mounted) Navigator.pop(context);
       } else if (mounted) {
         await sync.disconnect();
+        final err = SyncScope.of(context).lastError ?? 'Unknown error';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to connect to Google Drive.')),
+          SnackBar(content: Text('Failed to connect to Google Drive: $err')),
         );
       }
     } finally {

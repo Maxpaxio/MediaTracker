@@ -18,10 +18,12 @@ class SyncFileService extends ChangeNotifier {
   Duration interval = const Duration(seconds: 45);
   DateTime _lastRun = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime? _lastSyncAt; // last successful sync time
+  String? _lastError; // last error message (for UI)
 
   SyncFileState get state => _state;
   SyncEndpoint? get endpoint => _endpoint;
   DateTime? get lastSyncAt => _lastSyncAt;
+  String? get lastError => _lastError;
   String? get endpointHost {
     final ep = _endpoint;
     if (ep == null) return null;
@@ -87,8 +89,10 @@ class SyncFileService extends ChangeNotifier {
         // Create with current local content
         await _writeRemote(_toDoc(storage.all));
       }
+      _lastError = null;
       return true;
-    } catch (_) {
+    } catch (e) {
+      _lastError = e.toString();
       return false;
     }
   }
@@ -111,7 +115,7 @@ class SyncFileService extends ChangeNotifier {
     if (_endpoint == null) return;
     _state = SyncFileState.syncing;
     notifyListeners();
-    try {
+  try {
       final remote = await _readRemote();
       final local = _toDoc(storage.all);
 
@@ -124,9 +128,11 @@ class SyncFileService extends ChangeNotifier {
       storage.replaceAll(_fromDoc(merged));
 
   _lastSyncAt = DateTime.now();
+      _lastError = null;
       _state = SyncFileState.idle;
       notifyListeners();
-    } catch (_) {
+    } catch (e) {
+      _lastError = e.toString();
       _state = SyncFileState.error;
       notifyListeners();
     }
@@ -298,7 +304,9 @@ extension on SyncFileService {
     }
     final res = await http.get(Uri.parse(ep.url), headers: headers);
     if (res.statusCode == 404) return null; // treat as empty
-    if (res.statusCode >= 400) throw Exception('WebDAV read failed');
+    if (res.statusCode >= 400) {
+      throw Exception('WebDAV read failed: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
+    }
     _etag = res.headers['etag'];
     final body = utf8.decode(res.bodyBytes);
     return jsonDecode(body) as Map<String, dynamic>;
@@ -318,7 +326,9 @@ extension on SyncFileService {
       headers['authorization'] = 'Basic $cred';
     }
     final res = await http.put(Uri.parse(ep.url), headers: headers, body: jsonEncode(doc));
-    if (res.statusCode >= 400) throw Exception('WebDAV write failed');
+    if (res.statusCode >= 400) {
+      throw Exception('WebDAV write failed: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
+    }
     _etag = res.headers['etag'] ?? _etag;
   }
 }
@@ -343,8 +353,10 @@ extension _GoogleDrive on SyncFileService {
       'pageSize': '1',
     });
     final lr = await http.get(listUri, headers: {'authorization': 'Bearer $token'});
-    if (lr.statusCode == 401) throw Exception('Unauthorized');
-    if (lr.statusCode >= 400) throw Exception('Drive list failed');
+    if (lr.statusCode == 401) throw Exception('Drive unauthorized (401)');
+    if (lr.statusCode >= 400) {
+      throw Exception('Drive list failed: ${lr.statusCode} ${utf8.decode(lr.bodyBytes)}');
+    }
     final body = jsonDecode(utf8.decode(lr.bodyBytes)) as Map<String, dynamic>;
     final files = (body['files'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
     String fileId;
@@ -363,7 +375,9 @@ extension _GoogleDrive on SyncFileService {
           'parents': ['appDataFolder'],
         }),
       );
-      if (mr.statusCode >= 400) throw Exception('Drive create failed');
+      if (mr.statusCode >= 400) {
+        throw Exception('Drive create failed: ${mr.statusCode} ${utf8.decode(mr.bodyBytes)}');
+      }
       fileId = ((jsonDecode(mr.body) as Map)['id'] as String?) ?? '';
       // Initialize content
       await _gdUpload(fileId, token, _toDoc(storage.all));
@@ -385,7 +399,9 @@ extension _GoogleDrive on SyncFileService {
     final uri = Uri.parse('https://www.googleapis.com/drive/v3/files/$fileId').replace(queryParameters: {'alt': 'media'});
     final r = await http.get(uri, headers: {'authorization': 'Bearer $token'});
     if (r.statusCode == 404) return null;
-    if (r.statusCode >= 400) throw Exception('Drive read failed');
+    if (r.statusCode >= 400) {
+      throw Exception('Drive read failed: ${r.statusCode} ${utf8.decode(r.bodyBytes)}');
+    }
     return jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
   }
 
@@ -406,7 +422,9 @@ extension _GoogleDrive on SyncFileService {
           'content-type': 'application/json',
         },
         body: jsonEncode(doc));
-    if (r.statusCode >= 400) throw Exception('Drive upload failed');
+    if (r.statusCode >= 400) {
+      throw Exception('Drive upload failed: ${r.statusCode} ${utf8.decode(r.bodyBytes)}');
+    }
   }
 }
 
