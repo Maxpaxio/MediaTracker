@@ -81,6 +81,7 @@ class ShowsSearchController extends ChangeNotifier {
 
       // Map TMDB result → your Storage.Show (fill ALL required named params)
       results = list.map<Show>((m) {
+        final now = DateTime.now().millisecondsSinceEpoch;
         final id = (m['id'] as num?)?.toInt() ?? 0;
         final title =
             (m['name'] ?? m['original_name'] ?? m['title'] ?? '').toString();
@@ -106,6 +107,8 @@ class ShowsSearchController extends ChangeNotifier {
           genres: const <String>[],
           providers: const <String>[], // your model wants List<String>
           seasons: const <Season>[],
+          addedAt: now,
+          updatedAt: now,
         );
       }).toList(growable: false);
     } catch (e) {

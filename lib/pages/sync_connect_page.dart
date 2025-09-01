@@ -26,7 +26,7 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
   Future<void> _connect() async {
     final sync = SyncScope.of(context);
     setState(() => _busy = true);
-    sync.setEndpoint(SyncEndpoint.webdav(
+  await sync.setEndpoint(SyncEndpoint.webdav(
       url: _url.text.trim(),
       username: _user.text.isEmpty ? null : _user.text.trim(),
       password: _pass.text.isEmpty ? null : _pass.text,
@@ -43,19 +43,48 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
     if (mounted) setState(() => _busy = false);
   }
 
+  Future<void> _createNewFile() async {
+    // Export current local state as a new file for the user to save (web download).
+    final sync = SyncScope.of(context);
+    setState(() => _busy = true);
+    try {
+      await sync.exportCurrent('tv_tracker_sync.json');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File downloaded. Upload it to your storage and paste its URL.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _importExistingFile() async {
+    final sync = SyncScope.of(context);
+    setState(() => _busy = true);
+    final ok = await sync.importFromPicker();
+    if (mounted) setState(() => _busy = false);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok ? 'Imported local file.' : 'Import failed or invalid JSON.'),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Connect Storage (WebDAV)')),
+    appBar: AppBar(title: const Text('Connect Storage (WebDAV)')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Enter the full URL to your tv_tracker.json on your WebDAV server.'),
+      const Text('Enter the full URL to your tv_tracker_sync.json on your storage (WebDAV).'),
+      const SizedBox(height: 8),
+      const Text('No file yet? Create one from your current local library, upload it anywhere you prefer (iCloud/Drive/OneDrive/WebDAV), then paste its URL here.'),
           const SizedBox(height: 8),
           TextField(
             controller: _url,
             decoration: const InputDecoration(
-              labelText: 'File URL (https://server/path/tv_tracker.json)',
+        labelText: 'File URL (https://server/path/tv_tracker_sync.json)',
               prefixIcon: Icon(Icons.link),
             ),
           ),
@@ -88,6 +117,23 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
                 : const Icon(Icons.cloud_sync),
             label: const Text('Connect & Sync'),
           ),
+          const SizedBox(height: 20),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text('Don\'t have a file yet?', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Wrap(spacing: 12, runSpacing: 8, children: [
+            ElevatedButton.icon(
+              onPressed: _busy ? null : _createNewFile,
+              icon: const Icon(Icons.download),
+              label: const Text('Create & Download File'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _importExistingFile,
+              icon: const Icon(Icons.upload_file),
+              label: const Text('Import Local File'),
+            ),
+          ]),
         ],
       ),
     );

@@ -79,7 +79,39 @@ class _HomePageState extends State<HomePage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('TV Tracker'),
+          title: Builder(builder: (context) {
+            final sync = SyncScope.of(context);
+            final host = sync.endpointHost;
+            final last = sync.lastSyncAt;
+            String subtitle = '';
+            if (host != null && host.isNotEmpty) {
+              subtitle = host;
+            }
+            if (last != null) {
+              final t = TimeOfDay.fromDateTime(last);
+              final hh = t.hourOfPeriod.toString().padLeft(2, '0');
+              final mm = t.minute.toString().padLeft(2, '0');
+              final ampm = t.period == DayPeriod.am ? 'AM' : 'PM';
+              subtitle = [
+                if (subtitle.isNotEmpty) subtitle,
+                'Last sync: $hh:$mm $ampm'
+              ].where((s) => s.isNotEmpty).join(' • ');
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('TV Tracker'),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: Colors.white70),
+                  ),
+              ],
+            );
+          }),
           actions: [
             Builder(builder: (context) {
               final sync = SyncScope.of(context);
@@ -92,6 +124,16 @@ class _HomePageState extends State<HomePage> {
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Icon(Icons.circle, size: 10, color: color),
+              );
+            }),
+            Builder(builder: (context) {
+              final sync = SyncScope.of(context);
+              final connected = sync.endpoint != null && sync.state != SyncFileState.disconnected;
+              if (!connected) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Disconnect storage',
+                onPressed: () => SyncScope.of(context).disconnect(),
+                icon: const Icon(Icons.link_off),
               );
             }),
             IconButton(

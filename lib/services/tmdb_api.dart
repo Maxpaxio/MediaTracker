@@ -128,6 +128,7 @@ class TmdbApi {
             ))
         .toList(growable: false);
 
+    final now = DateTime.now().millisecondsSinceEpoch;
     return Show(
       id: _int(m['id']),
       title: title,
@@ -140,6 +141,8 @@ class TmdbApi {
       genres: genres,
       providers: const <String>[],
       seasons: seasons,
+      addedAt: now,
+      updatedAt: now,
     );
   }
 

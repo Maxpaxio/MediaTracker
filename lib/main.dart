@@ -15,6 +15,7 @@ void main() async {
   final storage = AppStorage();
   await storage.init();
   final sync = SyncFileService(storage);
+  await sync.init();
   runApp(MediaTrackerApp(storage: storage, sync: sync));
 }
 

@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'storage.dart';
+import '../utils/file_download.dart';
 
 /// A simple, file-based sync service using a single JSON file in a remote store.
 /// MVP backend: WebDAV via basic auth. Others (Drive/OneDrive/local file) can plug later.
@@ -15,17 +17,49 @@ class SyncFileService extends ChangeNotifier {
   String? _etag; // last known version from server when available
   Duration interval = const Duration(seconds: 45);
   DateTime _lastRun = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime? _lastSyncAt; // last successful sync time
 
   SyncFileState get state => _state;
   SyncEndpoint? get endpoint => _endpoint;
+  DateTime? get lastSyncAt => _lastSyncAt;
+  String? get endpointHost {
+    final url = _endpoint?.url;
+    if (url == null || url.isEmpty) return null;
+    try {
+      return Uri.parse(url).host;
+    } catch (_) {
+      return null;
+    }
+  }
 
-  void setEndpoint(SyncEndpoint ep) {
+  Future<void> init() async {
+    // Try restore last endpoint
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString('sync.endpoint');
+    if (json != null) {
+      try {
+        final m = jsonDecode(json) as Map<String, dynamic>;
+        final ep = SyncEndpoint.fromJson(m);
+        _endpoint = ep;
+        _state = SyncFileState.idle;
+        notifyListeners();
+        _scheduleTick();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> setEndpoint(SyncEndpoint ep) async {
     _endpoint = ep;
     notifyListeners();
   // Kick an immediate sync, then schedule periodic ones via a microtask loop.
   // Keep it lightweight for MVP; callers can also tap "Sync now".
   // We avoid using Timer.periodic to reduce wakeups when app is backgrounded.
   _scheduleTick();
+    // Persist
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('sync.endpoint', jsonEncode(ep.toJson()));
+    } catch (_) {}
   }
 
   Future<void> disconnect() async {
@@ -33,6 +67,10 @@ class SyncFileService extends ChangeNotifier {
     _etag = null;
     _revision = 0;
     _state = SyncFileState.disconnected;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('sync.endpoint');
+    } catch (_) {}
     notifyListeners();
   }
 
@@ -82,11 +120,35 @@ class SyncFileService extends ChangeNotifier {
       // Replace local with merged to keep consistent ordering/content.
       storage.replaceAll(_fromDoc(merged));
 
+  _lastSyncAt = DateTime.now();
       _state = SyncFileState.idle;
       notifyListeners();
     } catch (_) {
       _state = SyncFileState.error;
       notifyListeners();
+    }
+  }
+
+  // Export current local state to a downloaded JSON file (web only).
+  Future<void> exportCurrent(String fileName) async {
+    final doc = _toDoc(storage.all);
+    await downloadJsonFile(fileName, doc);
+  }
+
+  // Import a JSON doc (web file picker), replace local, and push to remote if connected.
+  Future<bool> importFromPicker() async {
+    final m = await pickJsonFile();
+    if (m == null) return false;
+    try {
+      final items = _fromDoc(m);
+      storage.replaceAll(items);
+      if (_endpoint != null) {
+        // Push imported doc to remote
+        await _writeRemote(_toDoc(items));
+      }
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -156,6 +218,26 @@ class SyncEndpoint {
     this.username,
     this.password,
   }) : backend = SyncBackend.webdav;
+
+  Map<String, dynamic> toJson() => {
+        'backend': backend.name,
+        'url': url,
+        'username': username,
+        'password': password,
+      };
+
+  factory SyncEndpoint.fromJson(Map<String, dynamic> m) {
+    final be = (m['backend'] as String?) ?? 'webdav';
+    switch (be) {
+      case 'webdav':
+      default:
+        return SyncEndpoint.webdav(
+          url: (m['url'] as String?) ?? '',
+          username: m['username'] as String?,
+          password: m['password'] as String?,
+        );
+    }
+  }
 }
 
 enum SyncBackend { webdav }
