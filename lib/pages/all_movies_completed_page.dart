@@ -3,21 +3,21 @@ import '../services/storage.dart';
 import 'show_detail_page.dart';
 import '../widgets/provider_corner_grid.dart';
 
-class AllWatchlistPage extends StatelessWidget {
-  static const route = '/watchlist';
-  const AllWatchlistPage({super.key});
+class AllMoviesCompletedPage extends StatelessWidget {
+  static const route = '/movies/completed';
+  const AllMoviesCompletedPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-  final items = StorageScope.of(context)
-    .watchlist
-    .where((s) => s.mediaType == MediaType.tv)
-    .toList();
+    final items = StorageScope.of(context)
+        .completed
+        .where((s) => s.mediaType == MediaType.movie)
+        .toList();
     return Scaffold(
-      appBar: AppBar(title: Text('Watchlist (${items.length})')),
+      appBar: AppBar(title: Text('Completed Movies (${items.length})')),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          const minCardWidth = 130.0;
+          const minCardWidth = 130.0; // poster width target
           final crossAxisCount = (constraints.maxWidth / minCardWidth)
               .floor()
               .clamp(3, 12);
@@ -45,7 +45,6 @@ class _Poster extends StatelessWidget {
   Widget build(BuildContext context) {
     const double cornerPad = 8;
     const double iconSize = 28;
-    const Color badgeColor = Color(0xFFFACC15);
     return GestureDetector(
       onTap: () => Navigator.pushNamed(
         context,
@@ -65,17 +64,15 @@ class _Poster extends StatelessWidget {
               ),
             ),
           ),
-          // Top-left provider logos (2x2)
           Positioned(
             left: cornerPad,
             top: cornerPad,
             child: ProviderCornerGrid(showId: show.id, mediaType: show.mediaType),
           ),
-          // Top-right bookmark
           const Positioned(
             right: cornerPad,
             top: cornerPad,
-            child: Icon(Icons.bookmark, size: iconSize, color: badgeColor),
+            child: Icon(Icons.check_circle, size: iconSize, color: Color(0xFF6EE7B7)),
           ),
         ],
       ),

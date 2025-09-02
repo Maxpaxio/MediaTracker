@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum WatchFlag { none, watchlist, completed }
 
+enum MediaType { tv, movie }
+
 class Season {
   final int seasonNumber;
   final String name;
@@ -55,6 +57,7 @@ class Show {
   final List<String> providers; // e.g. ["Disney+"]
   final List<Season> seasons;
   final WatchFlag flag;
+  final MediaType mediaType;
   final int addedAt; // epoch ms
   final int updatedAt; // epoch ms
 
@@ -71,6 +74,7 @@ class Show {
     required this.providers,
     required this.seasons,
     this.flag = WatchFlag.none,
+  this.mediaType = MediaType.tv,
   required this.addedAt,
   required this.updatedAt,
   });
@@ -87,6 +91,7 @@ class Show {
     List<String>? providers,
     List<Season>? seasons,
     WatchFlag? flag,
+    MediaType? mediaType,
     int? addedAt,
     int? updatedAt,
   }) {
@@ -103,6 +108,7 @@ class Show {
       providers: providers ?? this.providers,
       seasons: seasons ?? this.seasons,
       flag: flag ?? this.flag,
+      mediaType: mediaType ?? this.mediaType,
       addedAt: addedAt ?? this.addedAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -128,6 +134,7 @@ class Show {
         'genres': genres,
         'providers': providers,
         'flag': flag.index,
+  'type': mediaType.index,
         'seasons': seasons.map((e) => e.toJson()).toList(),
   'addedAt': addedAt,
   'updatedAt': updatedAt,
@@ -145,6 +152,7 @@ class Show {
         genres: (m['genres'] as List).cast<String>(),
         providers: (m['providers'] as List).cast<String>(),
         flag: WatchFlag.values[m['flag']],
+  mediaType: MediaType.values[(m['type'] as num?)?.toInt() ?? 0],
         seasons: (m['seasons'] as List).map((e) => Season.fromJson(e)).toList(),
   addedAt: (m['addedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
   updatedAt: (m['updatedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
@@ -341,34 +349,9 @@ class AppStorage extends ChangeNotifier {
         ..addAll(list.map(Show.fromJson));
       return;
     }
-    // Seed demo so UI looks right on first run
-  final now = DateTime.now().millisecondsSinceEpoch;
-  _shows.addAll([
-      Show(
-        id: 1,
-        title: 'Bluey',
-        overview:
-            'Bluey is an inexhaustible six-year-old Blue Heeler who loves to play and turns everyday family life into extraordinary adventures.',
-        posterUrl:
-            'https://image.tmdb.org/t/p/w342/5qS3d1vZEBtcHTulrHfXESyqSeW.jpg',
-        backdropUrl:
-            'https://image.tmdb.org/t/p/w780/o1lGHBX9nuSUXGMWzME2YkdE590.jpg',
-        firstAirDate: '2018-10-01',
-        lastAirDate: '2024-04-21',
-        rating: 8.6,
-        genres: ['Animation', 'Kids', 'Comedy'],
-        providers: ['Disney+'],
-        seasons: const [
-          Season(seasonNumber: 1, name: 'Season 1', episodeCount: 52),
-          Season(seasonNumber: 2, name: 'Season 2', episodeCount: 52),
-          Season(seasonNumber: 3, name: 'Season 3', episodeCount: 49),
-        ],
-        flag: WatchFlag.watchlist,
-    addedAt: now,
-    updatedAt: now,
-      ),
-    ]);
-    _persist();
+  // No seed demo on first run; start empty and persist empty list
+  _shows.clear();
+  _persist();
   }
 }
 

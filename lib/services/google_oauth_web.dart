@@ -15,6 +15,7 @@ Future<GoogleSession?> googleSignInPkce({
   required String clientId,
   required Uri redirectUri, // unused with GIS token client, kept for API compat
   required List<String> scopes,
+  bool silent = false,
 }) async {
   // Load Google Identity Services script
   const src = 'https://accounts.google.com/gsi/client';
@@ -57,7 +58,7 @@ Future<GoogleSession?> googleSignInPkce({
   final config = js_util.newObject();
   js_util.setProperty(config, 'client_id', clientId);
   js_util.setProperty(config, 'scope', scopes.join(' '));
-  js_util.setProperty(config, 'prompt', 'consent');
+  js_util.setProperty(config, 'prompt', silent ? 'none' : 'consent');
   js_util.setProperty(config, 'callback', allowInterop(handleResponse));
 
   final tokenClient = js_util.callMethod(oauth2, 'initTokenClient', [config]);

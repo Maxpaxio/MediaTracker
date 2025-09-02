@@ -90,6 +90,8 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
       await sync.setEndpoint(SyncEndpoint.googleDrive(
         accessToken: session.accessToken,
         expiresAt: session.expiresAt,
+        clientId: clientId,
+        scopes: const ['https://www.googleapis.com/auth/drive.appdata'],
       ));
       final ok = await sync.pingAndInit();
       if (ok) {
@@ -120,20 +122,82 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
 
   @override
   Widget build(BuildContext context) {
+    final sync = SyncScope.of(context);
+    final ep = sync.endpoint;
+    final connected = ep != null && sync.state != SyncFileState.disconnected;
+    final isDrive = ep?.backend == SyncBackend.googleDrive;
     return Scaffold(
-    appBar: AppBar(title: const Text('Connect Storage')),
+      appBar: AppBar(title: const Text('Connect Storage')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Connection summary (moved from Home)
+          if (connected) ...[
+            Builder(builder: (context) {
+              final color = switch (sync.state) {
+                SyncFileState.disconnected => Colors.white54,
+                SyncFileState.idle => Colors.lightGreenAccent,
+                SyncFileState.syncing => Colors.amberAccent,
+                SyncFileState.error => Colors.redAccent,
+              };
+              final host = sync.endpointHost ?? (isDrive ? 'Google Drive' : '');
+              final last = sync.lastSyncAt;
+              String lastStr = '';
+              if (last != null) {
+                final t = TimeOfDay.fromDateTime(last);
+                final hh = t.hourOfPeriod.toString().padLeft(2, '0');
+                final mm = t.minute.toString().padLeft(2, '0');
+                final ampm = t.period == DayPeriod.am ? 'AM' : 'PM';
+                lastStr = 'Last sync: $hh:$mm $ampm';
+              }
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.circle, size: 10, color: color),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(isDrive ? 'Connected to Google Drive' : 'Connected to WebDAV',
+                                style: Theme.of(context).textTheme.labelLarge),
+                            if (host.isNotEmpty) Text(host, style: Theme.of(context).textTheme.labelSmall),
+                            if (lastStr.isNotEmpty)
+                              Text(lastStr, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 12),
+          ],
           Text('Connect to a storage for live sync across devices.', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           Text('Option 1: Google Drive (free, web only)', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: _busy ? null : _connectGoogle,
-            icon: const Icon(Icons.cloud),
-            label: const Text('Connect Google Drive'),
-          ),
+          if (!connected || isDrive)
+            ElevatedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      if (!connected) {
+                        await _connectGoogle();
+                      } else {
+                        // Sync then disconnect
+                        setState(() => _busy = true);
+                        await sync.syncNow();
+                        await sync.disconnect();
+                        if (mounted) setState(() => _busy = false);
+                      }
+                    },
+              icon: Icon(connected ? Icons.link_off : Icons.cloud),
+              label: Text(connected ? 'Sync & Disconnect Google Drive' : 'Connect Google Drive'),
+            ),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 12),
@@ -167,17 +231,30 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
             ),
           ),
           const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _busy ? null : _connect,
-            icon: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.cloud_sync),
-            label: const Text('Connect & Sync'),
-          ),
+          if (!connected || !isDrive)
+            ElevatedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      if (!connected) {
+                        await _connect();
+                      } else {
+                        // Sync then disconnect for WebDAV
+                        setState(() => _busy = true);
+                        await sync.syncNow();
+                        await sync.disconnect();
+                        if (mounted) setState(() => _busy = false);
+                      }
+                    },
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(connected ? Icons.link_off : Icons.cloud_sync),
+              label: Text(connected ? 'Sync & Disconnect' : 'Connect & Sync'),
+            ),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 12),

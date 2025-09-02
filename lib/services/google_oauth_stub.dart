@@ -9,4 +9,5 @@ Future<GoogleSession?> googleSignInPkce({
   required String clientId,
   required Uri redirectUri,
   required List<String> scopes,
+  bool silent = false,
 }) async => null;

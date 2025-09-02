@@ -9,7 +9,10 @@ class AllCompletedPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = StorageScope.of(context).completed;
+  final items = StorageScope.of(context)
+    .completed
+    .where((s) => s.mediaType == MediaType.tv)
+    .toList();
     return Scaffold(
       appBar: AppBar(title: Text('Completed (${items.length})')),
       body: LayoutBuilder(
@@ -65,7 +68,7 @@ class _Poster extends StatelessWidget {
           Positioned(
             left: cornerPad,
             top: cornerPad,
-            child: ProviderCornerGrid(showId: show.id),
+            child: ProviderCornerGrid(showId: show.id, mediaType: show.mediaType),
           ),
           // Top-right checkmark
           const Positioned(

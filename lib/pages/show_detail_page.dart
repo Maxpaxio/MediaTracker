@@ -55,8 +55,16 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
 
     final storage = StorageScope.of(context);
 
-    // Always refresh full detail (en-US) so season labels are “Season”
-    await _refreshShowFromTmdb(storage, id);
+    // Peek existing to determine media type (movie vs tv)
+    final cached = storage.tryGet(id);
+
+    // Refresh full detail (en-US) using proper endpoint
+    if (cached?.mediaType == MediaType.movie) {
+      await _refreshMovieFromTmdb(storage, id);
+    } else {
+      // Default to TV if unknown
+      await _refreshShowFromTmdb(storage, id);
+    }
 
     // Reload from storage
     Show? s;
@@ -66,8 +74,9 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
       s = storage.tryGet(id);
     }
 
-    // Providers: STRICT to SE (no fallback)
-    await _loadProviders(id, regionCode: 'SE');
+  // Providers: STRICT to SE (no fallback) and correct type
+  final mt = (s?.mediaType) ?? cached?.mediaType ?? MediaType.tv;
+  await _loadProviders(id, regionCode: 'SE', mediaType: mt);
 
     if (!mounted) return;
     setState(() {
@@ -118,7 +127,41 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     }
   }
 
-  Future<void> _loadProviders(int showId, {required String regionCode}) async {
+  Future<void> _refreshMovieFromTmdb(AppStorage storage, int movieId) async {
+    try {
+      final full = await _api.fetchMovieDetailStorage(movieId);
+
+      final cached = storage.tryGet(movieId);
+      if (cached == null) {
+        storage.ensureShow(full);
+        return;
+      }
+
+      final merged = cached.copyWith(
+        overview: cached.overview.isNotEmpty ? cached.overview : full.overview,
+        posterUrl:
+            cached.posterUrl.isNotEmpty ? cached.posterUrl : full.posterUrl,
+        backdropUrl: cached.backdropUrl.isNotEmpty
+            ? cached.backdropUrl
+            : full.backdropUrl,
+        firstAirDate: cached.firstAirDate.isNotEmpty
+            ? cached.firstAirDate
+            : full.firstAirDate,
+        lastAirDate: full.lastAirDate, // movies: always null from API mapper
+        rating: cached.rating > 0 ? cached.rating : full.rating,
+        genres: cached.genres.isNotEmpty ? cached.genres : full.genres,
+        seasons: const <Season>[], // movies: no seasons
+        mediaType: MediaType.movie,
+      );
+
+      storage.updateShow(merged);
+    } catch (_) {
+      // ignore network errors
+    }
+  }
+
+  Future<void> _loadProviders(int showId,
+      {required String regionCode, required MediaType mediaType}) async {
     setState(() {
       _providersLoading = true;
       _streaming = const [];
@@ -126,7 +169,9 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     });
 
     try {
-      final res = await _api.fetchWatchProviders(showId, region: regionCode);
+      final res = mediaType == MediaType.movie
+          ? await _api.fetchMovieWatchProviders(showId, region: regionCode)
+          : await _api.fetchWatchProviders(showId, region: regionCode);
       if (!mounted) return;
       setState(() {
         _streaming = res.streaming;
@@ -278,39 +323,41 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
 
           const Divider(),
 
-          // SEASONS
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final season in show.seasons)
-                  _SeasonTile(
-                    key: ValueKey('season-${show.id}-${season.seasonNumber}'),
-                    show: show,
-                    season: season,
-                    seasonTitle: season.name.isNotEmpty
-                        ? season.name
-                        : 'Season ${season.seasonNumber}',
-                    initialExpanded: _expanded[season.seasonNumber] ?? false,
-                    triStateValue: _triStateFor(season),
-                    titles: _episodeTitles[season.seasonNumber],
-                    onBulkChange: (v) =>
-                        _setSeasonWatched(show, season, v == true),
-                    onEpisodeToggle: (epNum, v) =>
-                        _toggleEpisodeByCount(show, season, epNum, v),
-                    onToggle: (isOpen) async {
-                      _expanded[season.seasonNumber] = isOpen;
-                      if (isOpen) {
-                        await _ensureEpisodeTitles(
-                            season.seasonNumber, season.episodeCount);
-                      }
-                      if (mounted) setState(() {});
-                    },
-                  ),
-              ],
+          // SEASONS (TV only)
+          if (show.mediaType == MediaType.tv)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final season in show.seasons)
+                    _SeasonTile(
+                      key:
+                          ValueKey('season-${show.id}-${season.seasonNumber}'),
+                      show: show,
+                      season: season,
+                      seasonTitle: season.name.isNotEmpty
+                          ? season.name
+                          : 'Season ${season.seasonNumber}',
+                      initialExpanded: _expanded[season.seasonNumber] ?? false,
+                      triStateValue: _triStateFor(season),
+                      titles: _episodeTitles[season.seasonNumber],
+                      onBulkChange: (v) =>
+                          _setSeasonWatched(show, season, v == true),
+                      onEpisodeToggle: (epNum, v) =>
+                          _toggleEpisodeByCount(show, season, epNum, v),
+                      onToggle: (isOpen) async {
+                        _expanded[season.seasonNumber] = isOpen;
+                        if (isOpen) {
+                          await _ensureEpisodeTitles(
+                              season.seasonNumber, season.episodeCount);
+                        }
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                ],
+              ),
             ),
-          ),
 
           const SizedBox(height: 24),
         ],

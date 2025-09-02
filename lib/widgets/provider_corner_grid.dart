@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/tmdb_api.dart';
+import '../services/storage.dart';
 
 class ProviderCornerGrid extends StatefulWidget {
-  const ProviderCornerGrid({super.key, required this.showId, this.size = 28});
+  const ProviderCornerGrid({super.key, required this.showId, required this.mediaType, this.size = 28});
   final int showId;
+  final MediaType mediaType;
   final double size; // badge size (match checkmark/bookmark)
 
   @override
@@ -38,7 +40,9 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
 
   Future<void> _load() async {
     try {
-      final res = await _api.fetchWatchProviders(widget.showId, region: 'SE');
+    final res = widget.mediaType == MediaType.movie
+      ? await _api.fetchMovieWatchProviders(widget.showId, region: 'SE')
+      : await _api.fetchWatchProviders(widget.showId, region: 'SE');
       final combined = <Map<String, dynamic>>[...res.streaming, ...res.rentBuy];
       if (!mounted) return;
       setState(() {

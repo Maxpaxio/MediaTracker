@@ -20,9 +20,13 @@ class _MoreInfoPageState extends State<MoreInfoPage> {
   Show? _show;
   double _rating = 0;
   List<String> _genres = const [];
+  // TV-only
   List<int> _runtimes = const [];
   String _firstAir = '';
   List<String> _creators = const [];
+  // Movie-only
+  int _runtimeMovie = 0;
+  String _releaseDate = '';
   List<({String name, String logoPath})> _companies = const [];
   List<Map<String, dynamic>> _cast = const [];
 
@@ -44,19 +48,48 @@ class _MoreInfoPageState extends State<MoreInfoPage> {
     setState(() => _loading = true);
     final storage = StorageScope.of(context);
     final s = storage.tryGet(widget.showId);
+    MediaType mt = s?.mediaType ?? MediaType.tv;
 
-    final extras = await _api.fetchShowExtras(widget.showId);
-    final cast = await _api.fetchAggregateCast(widget.showId);
+    double rating = 0;
+    List<String> genres = const [];
+    List<({String name, String logoPath})> companies = const [];
+    List<Map<String, dynamic>> cast = const [];
+    List<int> tvRun = const [];
+    String tvFirst = '';
+    List<String> tvCreators = const [];
+    int movieRt = 0;
+    String movieRel = '';
+
+    if (mt == MediaType.movie) {
+      final extras = await _api.fetchMovieExtras(widget.showId);
+      rating = extras.rating;
+      genres = extras.genres;
+      companies = extras.companies;
+      movieRt = extras.runtime;
+      movieRel = extras.releaseDate;
+      cast = await _api.fetchMovieCast(widget.showId);
+    } else {
+      final extras = await _api.fetchShowExtras(widget.showId);
+      rating = extras.rating;
+      genres = extras.genres;
+      companies = extras.companies;
+      tvRun = extras.episodeRunTimes;
+      tvFirst = extras.firstAirDate;
+      tvCreators = extras.creators;
+      cast = await _api.fetchAggregateCast(widget.showId);
+    }
 
     if (!mounted) return;
     setState(() {
       _show = s;
-      _rating = extras.rating;
-      _genres = extras.genres;
-      _runtimes = extras.episodeRunTimes;
-      _firstAir = extras.firstAirDate;
-      _creators = extras.creators;
-      _companies = extras.companies;
+  _rating = rating;
+  _genres = genres;
+  _runtimes = tvRun;
+  _firstAir = tvFirst;
+  _creators = tvCreators;
+  _companies = companies;
+  _runtimeMovie = movieRt;
+  _releaseDate = movieRel;
       _cast = cast;
       _loading = false;
     });
@@ -79,6 +112,7 @@ class _MoreInfoPageState extends State<MoreInfoPage> {
 
     final s = _show!;
 
+    final isMovie = s.mediaType == MediaType.movie;
     return Scaffold(
       appBar: AppBar(title: Text('${s.title} – More info')),
       body: ListView(
@@ -104,39 +138,56 @@ class _MoreInfoPageState extends State<MoreInfoPage> {
                     children: _genres.map((g) => Chip(label: Text(g))).toList(),
                   ),
           ),
-          _Section(title: 'Average Episode Runtime', child: Text(_avgRuntimeText())),
-          _Section(
-            title: 'Air Dates',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('First air date: ${_firstAir.isNotEmpty ? _firstAir : '—'}'),
-                Text('Last air date: ${s.lastAirDate ?? '—'}'),
-              ],
+          if (!isMovie)
+            _Section(
+                title: 'Average Episode Runtime',
+                child: Text(_avgRuntimeText())),
+          if (!isMovie)
+            _Section(
+              title: 'Air Dates',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('First air date: ${_firstAir.isNotEmpty ? _firstAir : '—'}'),
+                  Text('Last air date: ${s.lastAirDate ?? '—'}'),
+                ],
+              ),
             ),
-          ),
-          _Section(
-            title: 'Creator(s)',
-            child: _creators.isEmpty
-                ? const Text('—')
-                : Wrap(
-                    spacing: 8,
-                    children: _creators.map((c) => Chip(label: Text(c))).toList(),
-                  ),
-          ),
+          if (isMovie)
+            _Section(
+              title: 'Runtime',
+              child: Text(_runtimeMovie > 0 ? '$_runtimeMovie min' : '—'),
+            ),
+          if (isMovie)
+            _Section(
+              title: 'Release Date',
+              child: Text(_releaseDate.isNotEmpty ? _releaseDate : '—'),
+            ),
+          if (!isMovie)
+            _Section(
+              title: 'Creator(s)',
+              child: _creators.isEmpty
+                  ? const Text('—')
+                  : Wrap(
+                      spacing: 8,
+                      children: _creators.map((c) => Chip(label: Text(c))).toList(),
+                    ),
+            ),
           _Section(
             title: 'Production Companies',
             child: _CompanyWrap(companies: _companies.take(3).toList()),
           ),
           _Section(
             title: 'Top Cast',
-            child: _CastWrap(cast: _cast),
+            child: _CastWrap(cast: _cast, isMovie: isMovie),
           ),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: () async {
-                final url = Uri.parse('https://www.themoviedb.org/tv/${s.id}/cast');
+                final url = isMovie
+                    ? Uri.parse('https://www.themoviedb.org/movie/${s.id}')
+                    : Uri.parse('https://www.themoviedb.org/tv/${s.id}/cast');
                 try {
                   await launchUrl(url, mode: LaunchMode.externalApplication);
                 } catch (_) {}
@@ -217,8 +268,8 @@ class _CompanyBox extends StatelessWidget {
 class _CastBubble extends StatelessWidget {
   const _CastBubble({
     required this.name,
-    required this.role,
-    required this.episodes,
+  required this.role,
+  required this.episodes,
     required this.profilePath,
   });
   final String name;
@@ -255,13 +306,14 @@ class _CastBubble extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
           ),
-          Text(
-            '$episodes eps',
-            style: Theme.of(context).textTheme.bodySmall,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
+          if (episodes > 0)
+            Text(
+              '$episodes eps',
+              style: Theme.of(context).textTheme.bodySmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
         ],
       ),
     );
@@ -286,8 +338,9 @@ class _CompanyWrap extends StatelessWidget {
 }
 
 class _CastWrap extends StatelessWidget {
-  const _CastWrap({required this.cast});
+  const _CastWrap({required this.cast, required this.isMovie});
   final List<Map<String, dynamic>> cast;
+  final bool isMovie;
 
   @override
   Widget build(BuildContext context) {
@@ -299,7 +352,7 @@ class _CastWrap extends StatelessWidget {
           .map((m) => _CastBubble(
                 name: (m['name'] as String?) ?? '',
                 role: (m['character'] as String?) ?? '',
-                episodes: (m['episodes'] as int?) ?? 0,
+                episodes: isMovie ? 0 : (m['episodes'] as int?) ?? 0,
                 profilePath: (m['profile_path'] as String?) ?? '',
               ))
           .toList(),

@@ -4,12 +4,16 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'storage.dart';
 import '../utils/file_download.dart';
+import 'google_oauth.dart';
 
 /// A simple, file-based sync service using a single JSON file in a remote store.
 /// MVP backend: WebDAV via basic auth. Others (Drive/OneDrive/local file) can plug later.
 class SyncFileService extends ChangeNotifier {
   final AppStorage storage;
-  SyncFileService(this.storage);
+  SyncFileService(this.storage) {
+    // Listen to local storage changes and trigger a sync when local state differs
+    storage.addListener(_onStorageChanged);
+  }
 
   SyncEndpoint? _endpoint;
   SyncFileState _state = SyncFileState.disconnected;
@@ -19,6 +23,9 @@ class SyncFileService extends ChangeNotifier {
   DateTime _lastRun = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime? _lastSyncAt; // last successful sync time
   String? _lastError; // last error message (for UI)
+  Map<String, dynamic>? _lastSyncedDoc; // snapshot of last successfully synced doc
+  bool _pendingChangeSync = false; // debounce flag
+  bool _suppressChangeSync = false; // avoid feedback during merge writes
 
   SyncFileState get state => _state;
   SyncEndpoint? get endpoint => _endpoint;
@@ -51,6 +58,8 @@ class SyncFileService extends ChangeNotifier {
         _scheduleTick();
       } catch (_) {}
     }
+  // Establish local baseline for change detection
+  _lastSyncedDoc = _toDoc(storage.all);
   }
 
   Future<void> setEndpoint(SyncEndpoint ep) async {
@@ -103,7 +112,10 @@ class SyncFileService extends ChangeNotifier {
       final now = DateTime.now();
       if (now.difference(_lastRun) >= interval && _state != SyncFileState.syncing) {
         _lastRun = now;
-        try { await syncNow(); } catch (_) {}
+        try {
+          await _maybeRefreshToken();
+          await syncNow();
+        } catch (_) {}
       }
       // Reschedule while connected
       _scheduleTick();
@@ -115,7 +127,8 @@ class SyncFileService extends ChangeNotifier {
     if (_endpoint == null) return;
     _state = SyncFileState.syncing;
     notifyListeners();
-  try {
+    _suppressChangeSync = true; // prevent feedback loop while we reconcile
+    try {
       final remote = await _readRemote();
       final local = _toDoc(storage.all);
 
@@ -126,8 +139,8 @@ class SyncFileService extends ChangeNotifier {
       }
       // Replace local with merged to keep consistent ordering/content.
       storage.replaceAll(_fromDoc(merged));
-
-  _lastSyncAt = DateTime.now();
+      _lastSyncedDoc = merged;
+      _lastSyncAt = DateTime.now();
       _lastError = null;
       _state = SyncFileState.idle;
       notifyListeners();
@@ -135,6 +148,8 @@ class SyncFileService extends ChangeNotifier {
       _lastError = e.toString();
       _state = SyncFileState.error;
       notifyListeners();
+    } finally {
+      _suppressChangeSync = false;
     }
   }
 
@@ -215,6 +230,75 @@ class SyncFileService extends ChangeNotifier {
   }
 
   bool _deepEquals(Object? a, Object? b) => const DeepCollectionEquality().equals(a, b);
+
+  // --- Auth helpers ---
+  Future<void> _maybeRefreshToken() async {
+    final ep = _endpoint;
+    if (ep == null || ep.backend != SyncBackend.googleDrive) return;
+    final expiresMs = ep.googleExpiresAtMs ?? 0;
+    // Refresh 60s before expiry
+    final needs = expiresMs == 0 ||
+        DateTime.now().isAfter(
+          DateTime.fromMillisecondsSinceEpoch(expiresMs - 60 * 1000),
+        );
+    if (!needs) return;
+    final clientId = ep.googleClientId;
+    final scopes = ep.googleScopes ?? const ['https://www.googleapis.com/auth/drive.appdata'];
+    if (clientId == null || clientId.isEmpty) return;
+    final sess = await googleSignInPkce(
+      clientId: clientId,
+      redirectUri: Uri(),
+      scopes: scopes,
+      silent: true,
+    );
+    if (sess == null) {
+      throw Exception('Google token refresh failed');
+    }
+    final newEp = SyncEndpoint.googleDrive(
+      accessToken: sess.accessToken,
+      expiresAt: sess.expiresAt,
+      fileId: ep.googleFileId,
+      clientId: clientId,
+      scopes: scopes,
+    );
+    await setEndpoint(newEp);
+  }
+
+  Future<void> reconnect() async {
+    if (_endpoint == null) return;
+    try {
+      await _maybeRefreshToken();
+      final ok = await pingAndInit();
+      if (ok) {
+        await syncNow();
+      } else {
+        throw Exception('Reconnect ping failed');
+      }
+    } catch (e) {
+      _lastError = e.toString();
+      _state = SyncFileState.error;
+      notifyListeners();
+    }
+  }
+
+  // --- Local change detection -> auto-sync ---
+  void _onStorageChanged() {
+    if (_suppressChangeSync) return; // ignore internal updates during sync
+    if (_endpoint == null) return; // not connected
+    // Only sync when the local doc differs from the last known synced doc
+    final current = _toDoc(storage.all);
+    if (_lastSyncedDoc != null && _deepEquals(current, _lastSyncedDoc)) return;
+    if (_pendingChangeSync) return; // debounce
+    _pendingChangeSync = true;
+    Future<void>.delayed(const Duration(milliseconds: 600), () async {
+      _pendingChangeSync = false;
+      if (_endpoint == null) return;
+      try {
+        await _maybeRefreshToken();
+        await syncNow();
+      } catch (_) {}
+    });
+  }
 }
 
 enum SyncFileState { disconnected, syncing, idle, error }
@@ -229,6 +313,8 @@ class SyncEndpoint {
   final String? googleAccessToken;
   final int? googleExpiresAtMs; // epoch ms
   final String? googleFileId; // resolved appDataFolder file id
+  final String? googleClientId;
+  final List<String>? googleScopes;
 
   const SyncEndpoint.webdav({
     required this.url,
@@ -237,19 +323,25 @@ class SyncEndpoint {
   })  : backend = SyncBackend.webdav,
         googleAccessToken = null,
         googleExpiresAtMs = null,
-        googleFileId = null;
+  googleFileId = null,
+  googleClientId = null,
+  googleScopes = null;
 
   SyncEndpoint.googleDrive({
     required String accessToken,
     required DateTime expiresAt,
     String? fileId,
+  String? clientId,
+  List<String>? scopes,
   })  : backend = SyncBackend.googleDrive,
         url = '',
         username = null,
         password = null,
         googleAccessToken = accessToken,
         googleExpiresAtMs = expiresAt.millisecondsSinceEpoch,
-        googleFileId = fileId;
+    googleFileId = fileId,
+    googleClientId = clientId,
+    googleScopes = scopes;
 
   Map<String, dynamic> toJson() => {
         'backend': backend.name,
@@ -259,6 +351,8 @@ class SyncEndpoint {
   'googleAccessToken': googleAccessToken,
   'googleExpiresAtMs': googleExpiresAtMs,
   'googleFileId': googleFileId,
+  'googleClientId': googleClientId,
+  'googleScopes': googleScopes,
       };
 
   factory SyncEndpoint.fromJson(Map<String, dynamic> m) {
@@ -270,6 +364,8 @@ class SyncEndpoint {
           expiresAt: DateTime.fromMillisecondsSinceEpoch(
               (m['googleExpiresAtMs'] as num?)?.toInt() ?? 0),
           fileId: m['googleFileId'] as String?,
+          clientId: m['googleClientId'] as String?,
+          scopes: (m['googleScopes'] as List?)?.cast<String>(),
         );
       case 'webdav':
         return SyncEndpoint.webdav(
@@ -294,6 +390,7 @@ extension on SyncFileService {
   Future<Map<String, dynamic>?> _readRemote() async {
     final ep = _endpoint!;
     if (ep.backend == SyncBackend.googleDrive) {
+  await _maybeRefreshToken();
       return _gdRead(ep);
     }
     if (ep.backend != SyncBackend.webdav) return null;
@@ -315,6 +412,7 @@ extension on SyncFileService {
   Future<void> _writeRemote(Map<String, dynamic> doc) async {
     final ep = _endpoint!;
     if (ep.backend == SyncBackend.googleDrive) {
+  await _maybeRefreshToken();
       await _gdWrite(ep, doc);
       return;
     }
@@ -387,6 +485,8 @@ extension _GoogleDrive on SyncFileService {
       accessToken: token,
       expiresAt: DateTime.fromMillisecondsSinceEpoch(ep.googleExpiresAtMs ?? 0),
       fileId: fileId,
+      clientId: ep.googleClientId,
+      scopes: ep.googleScopes,
     );
     await setEndpoint(newEp);
     return fileId;

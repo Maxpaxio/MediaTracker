@@ -3,21 +3,21 @@ import '../services/storage.dart';
 import 'show_detail_page.dart';
 import '../widgets/provider_corner_grid.dart';
 
-class AllWatchlistPage extends StatelessWidget {
-  static const route = '/watchlist';
-  const AllWatchlistPage({super.key});
+class AllMoviesWatchlistPage extends StatelessWidget {
+  static const route = '/movies/watchlist';
+  const AllMoviesWatchlistPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-  final items = StorageScope.of(context)
-    .watchlist
-    .where((s) => s.mediaType == MediaType.tv)
-    .toList();
+    final items = StorageScope.of(context)
+        .watchlist
+        .where((s) => s.mediaType == MediaType.movie)
+        .toList();
     return Scaffold(
-      appBar: AppBar(title: Text('Watchlist (${items.length})')),
+      appBar: AppBar(title: Text('Watchlist Movies (${items.length})')),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          const minCardWidth = 130.0;
+          const minCardWidth = 130.0; // poster width target
           final crossAxisCount = (constraints.maxWidth / minCardWidth)
               .floor()
               .clamp(3, 12);
@@ -65,13 +65,11 @@ class _Poster extends StatelessWidget {
               ),
             ),
           ),
-          // Top-left provider logos (2x2)
           Positioned(
             left: cornerPad,
             top: cornerPad,
             child: ProviderCornerGrid(showId: show.id, mediaType: show.mediaType),
           ),
-          // Top-right bookmark
           const Positioned(
             right: cornerPad,
             top: cornerPad,

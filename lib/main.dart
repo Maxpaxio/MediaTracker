@@ -3,12 +3,16 @@ import 'theme.dart';
 import 'services/storage.dart';
 import 'services/sync_file_service.dart';
 import 'pages/home_page.dart';
+import 'pages/media_home_page.dart';
+import 'pages/films_page.dart';
 import 'pages/all_completed_page.dart';
 import 'pages/all_ongoing_page.dart';
 import 'pages/all_watchlist_page.dart';
 import 'pages/show_detail_page.dart';
 import 'pages/subpages/more_info_page.dart';
 import 'pages/sync_connect_page.dart';
+import 'pages/all_movies_completed_page.dart';
+import 'pages/all_movies_watchlist_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,10 +39,14 @@ class MediaTrackerApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: buildDarkTheme(),
         routes: {
-          '/': (_) => const HomePage(),
+          '/': (_) => const MediaHomePage(),
+          FilmsPage.route: (_) => const FilmsPage(),
+          HomePage.route: (_) => const HomePage(),
           AllOngoingPage.route: (_) => const AllOngoingPage(),
           AllCompletedPage.route: (_) => const AllCompletedPage(),
           AllWatchlistPage.route: (_) => const AllWatchlistPage(),
+          AllMoviesCompletedPage.route: (_) => const AllMoviesCompletedPage(),
+          AllMoviesWatchlistPage.route: (_) => const AllMoviesWatchlistPage(),
             SyncConnectPage.route: (_) => const SyncConnectPage(),
         },
         onGenerateRoute: (settings) {

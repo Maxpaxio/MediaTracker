@@ -13,6 +13,7 @@ import 'all_watchlist_page.dart';
 import 'show_detail_page.dart';
 
 class HomePage extends StatefulWidget {
+  static const route = '/tv';
   const HomePage({super.key});
 
   @override
@@ -63,9 +64,21 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final storage = StorageScope.of(context);
   // Show newest-added first by reversing the lists at display time
-  final ongoing = List<Show>.from(storage.ongoing.reversed);
-  final completed = List<Show>.from(storage.completed.reversed);
-  final watchlist = List<Show>.from(storage.watchlist.reversed);
+  final ongoing = storage.ongoing
+    .where((s) => s.mediaType == MediaType.tv)
+    .toList()
+    .reversed
+    .toList();
+  final completed = storage.completed
+    .where((s) => s.mediaType == MediaType.tv)
+    .toList()
+    .reversed
+    .toList();
+  final watchlist = storage.watchlist
+    .where((s) => s.mediaType == MediaType.tv)
+    .toList()
+    .reversed
+    .toList();
 
     final hasQuery = search.text.text.isNotEmpty;
 
@@ -79,39 +92,23 @@ class _HomePageState extends State<HomePage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Builder(builder: (context) {
-            final sync = SyncScope.of(context);
-            final host = sync.endpointHost;
-            final last = sync.lastSyncAt;
-            String subtitle = '';
-            if (host != null && host.isNotEmpty) {
-              subtitle = host;
-            }
-            if (last != null) {
-              final t = TimeOfDay.fromDateTime(last);
-              final hh = t.hourOfPeriod.toString().padLeft(2, '0');
-              final mm = t.minute.toString().padLeft(2, '0');
-              final ampm = t.period == DayPeriod.am ? 'AM' : 'PM';
-              subtitle = [
-                if (subtitle.isNotEmpty) subtitle,
-                'Last sync: $hh:$mm $ampm'
-              ].where((s) => s.isNotEmpty).join(' • ');
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('TV Tracker'),
-                if (subtitle.isNotEmpty)
-                  Text(
-                    subtitle,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelSmall
-                        ?.copyWith(color: Colors.white70),
-                  ),
-              ],
-            );
-          }),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF232327), Color(0xFF1B1B1E)],
+              ),
+            ),
+          ),
+          title: const Text('TV'),
+          leading: Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu),
+              tooltip: 'Menu',
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
           actions: [
             Builder(builder: (context) {
               final sync = SyncScope.of(context);
@@ -126,27 +123,45 @@ class _HomePageState extends State<HomePage> {
                 child: Icon(Icons.circle, size: 10, color: color),
               );
             }),
-            Builder(builder: (context) {
-              final sync = SyncScope.of(context);
-              final connected = sync.endpoint != null && sync.state != SyncFileState.disconnected;
-              if (!connected) return const SizedBox.shrink();
-              return IconButton(
-                tooltip: 'Disconnect storage',
-                onPressed: () => SyncScope.of(context).disconnect(),
-                icon: const Icon(Icons.link_off),
-              );
-            }),
             IconButton(
               tooltip: 'Sync now',
               onPressed: () => SyncScope.of(context).syncNow(),
               icon: const Icon(Icons.sync),
             ),
-            IconButton(
-              tooltip: 'Connect storage',
-              onPressed: () => Navigator.pushNamed(context, SyncConnectPage.route),
-              icon: const Icon(Icons.cloud),
-            ),
           ],
+        ),
+        drawer: Drawer(
+          child: SafeArea(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                const DrawerHeader(
+                  child: Text('MediaTracker', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.search),
+                  title: const Text('Search / Home'),
+                  onTap: () => Navigator.pushReplacementNamed(context, '/'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.live_tv),
+                  title: const Text('TV'),
+                  onTap: () => Navigator.pop(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.movie),
+                  title: const Text('Films'),
+                  onTap: () => Navigator.pushNamed(context, '/films'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.cloud),
+                  title: const Text('Cloud storage'),
+                  onTap: () => Navigator.pushNamed(context, SyncConnectPage.route),
+                ),
+              ],
+            ),
+          ),
         ),
         body: CustomScrollView(
           slivers: [
@@ -319,110 +334,131 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-/// Ongoing card with provider **logos from TMDb** (same as details), placed under title.
-/// Ongoing card with provider **logos from TMDb** (same as details), placed under title.
-class _OngoingCard extends StatelessWidget {
+/// Ongoing card with provider logos and subtle hover/animation polish.
+class _OngoingCard extends StatefulWidget {
   const _OngoingCard({super.key, required this.show});
   final Show show;
 
   @override
+  State<_OngoingCard> createState() => _OngoingCardState();
+}
+
+class _OngoingCardState extends State<_OngoingCard> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
+    final show = widget.show;
     final epSeen = show.watchedEpisodes;
     final epTotal = show.totalEpisodes;
     final pct = (show.progress * 100).round();
 
-    return SizedBox(
-      width: 210, // tightened overall width
-      child: Card(
-        margin: EdgeInsets.zero, // no extra margin
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            Navigator.pushNamed(
-              context,
-              ShowDetailPage.route,
-              arguments: ShowDetailArgs(showId: show.id),
-            );
-          },
-          child: Padding(
-            // less right/bottom padding
-            padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top row: poster + right column (title + logos)
-                Row(
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        scale: _hover ? 1.02 : 1.0,
+        child: SizedBox(
+          width: 210,
+          child: Card(
+            elevation: _hover ? 8 : 2,
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  ShowDetailPage.route,
+                  arguments: ShowDetailArgs(showId: show.id),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Poster
+                    // Top row: poster + right column (title + logos)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Poster
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            show.posterUrl,
+                            width: 90,
+                            height: 130,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 90,
+                              height: 130,
+                              color: const Color(0xFF2C2C32),
+                              alignment: Alignment.center,
+                              child: const Icon(Icons.broken_image),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Right side: title + provider logos grid
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Title
+                              Text(
+                                show.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                  height: 1.1,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+
+                              // TMDb provider logos
+                              _ProviderLogosGrid(showId: show.id),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    // Ep seen line
+                    Text(
+                      '$epSeen/$epTotal Ep seen',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+
+                    // Progress bar (animated)
+                    const SizedBox(height: 4),
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        show.posterUrl,
-                        width: 90,
-                        height: 130,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 70,
-                          height: 105,
-                          color: const Color(0xFF2C2C32),
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.broken_image),
+                      borderRadius: BorderRadius.circular(4),
+                      child: SizedBox(
+                        height: 6,
+                        child: TweenAnimationBuilder<double>(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                          tween: Tween<double>(end: show.progress),
+                          builder: (context, value, _) => LinearProgressIndicator(value: value),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
 
-                    // Right side: title + provider logos grid
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Title
-                          Text(
-                            show.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                              height: 1.1,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-
-                          // TMDb provider logos
-                          _ProviderLogosGrid(showId: show.id),
-                        ],
-                      ),
+                    // Percentage
+                    Text(
+                      'Progress: $pct%',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 6),
-
-                // Ep seen line
-                Text(
-                  '$epSeen/$epTotal Ep seen',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-
-                // Progress bar
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: SizedBox(
-                    height: 6,
-                    child: LinearProgressIndicator(value: show.progress),
-                  ),
-                ),
-
-                // Percentage
-                Text(
-                  'Progress: $pct%',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+              ),
             ),
           ),
         ),

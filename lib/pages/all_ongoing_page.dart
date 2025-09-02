@@ -9,7 +9,10 @@ class AllOngoingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = StorageScope.of(context).ongoing;
+  final items = StorageScope.of(context)
+    .ongoing
+    .where((s) => s.mediaType == MediaType.tv)
+    .toList();
     return Scaffold(
       appBar: AppBar(title: Text('Ongoing (${items.length})')),
       body: LayoutBuilder(
@@ -75,7 +78,7 @@ class _Poster extends StatelessWidget {
                 Positioned(
                   left: cornerPad,
                   top: cornerPad,
-                  child: ProviderCornerGrid(showId: show.id),
+                  child: ProviderCornerGrid(showId: show.id, mediaType: show.mediaType),
                 ),
               ],
             ),
