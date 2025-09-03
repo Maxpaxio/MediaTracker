@@ -26,6 +26,9 @@ class SyncFileService extends ChangeNotifier {
   Map<String, dynamic>? _lastSyncedDoc; // snapshot of last successfully synced doc
   bool _pendingChangeSync = false; // debounce flag
   bool _suppressChangeSync = false; // avoid feedback during merge writes
+  bool _syncQueued = false; // queue another sync after current finishes
+  bool _autoSyncPending = false; // there is a pending auto-sync request
+  Map<int, int> _lastCategoryFlags = const {}; // id -> WatchFlag index (only non-none)
 
   SyncFileState get state => _state;
   SyncEndpoint? get endpoint => _endpoint;
@@ -60,6 +63,7 @@ class SyncFileService extends ChangeNotifier {
     }
   // Establish local baseline for change detection
   _lastSyncedDoc = _toDoc(storage.all);
+  _snapshotCategoryFlags();
   }
 
   Future<void> setEndpoint(SyncEndpoint ep) async {
@@ -110,7 +114,7 @@ class SyncFileService extends ChangeNotifier {
     Future<void>.delayed(const Duration(seconds: 1), () async {
       if (_endpoint == null) return; // disconnected
       final now = DateTime.now();
-      if (now.difference(_lastRun) >= interval && _state != SyncFileState.syncing) {
+  if (_autoSyncPending && now.difference(_lastRun) >= interval && _state != SyncFileState.syncing) {
         _lastRun = now;
         try {
           await _maybeRefreshToken();
@@ -143,6 +147,7 @@ class SyncFileService extends ChangeNotifier {
       _lastSyncAt = DateTime.now();
       _lastError = null;
       _state = SyncFileState.idle;
+      _autoSyncPending = false; // cleared once we successfully synced
       notifyListeners();
     } catch (e) {
       _lastError = e.toString();
@@ -150,6 +155,12 @@ class SyncFileService extends ChangeNotifier {
       notifyListeners();
     } finally {
       _suppressChangeSync = false;
+      if (_syncQueued && _endpoint != null) {
+        _syncQueued = false;
+        // Trigger a follow-up sync to capture changes that arrived during syncing.
+        // Do not wait interval; run immediately.
+        await syncNow();
+      }
     }
   }
 
@@ -285,19 +296,59 @@ class SyncFileService extends ChangeNotifier {
   void _onStorageChanged() {
     if (_suppressChangeSync) return; // ignore internal updates during sync
     if (_endpoint == null) return; // not connected
-    // Only sync when the local doc differs from the last known synced doc
-    final current = _toDoc(storage.all);
-    if (_lastSyncedDoc != null && _deepEquals(current, _lastSyncedDoc)) return;
+    // Only auto-sync when a category membership changes (watchlist/completed toggles)
+    final changed = _categoryChangedSinceLastSnapshot();
+    if (!changed) return;
     if (_pendingChangeSync) return; // debounce
     _pendingChangeSync = true;
+    _autoSyncPending = true;
     Future<void>.delayed(const Duration(milliseconds: 600), () async {
       _pendingChangeSync = false;
       if (_endpoint == null) return;
+      // If a sync is in progress, queue one immediately after.
+      if (_state == SyncFileState.syncing) {
+        _syncQueued = true;
+        return;
+      }
       try {
         await _maybeRefreshToken();
         await syncNow();
       } catch (_) {}
     });
+  }
+
+  // Capture current category flags into snapshot map.
+  void _snapshotCategoryFlags() {
+    final map = <int, int>{};
+    for (final s in storage.all) {
+      if (s.flag != WatchFlag.none) {
+        map[s.id] = s.flag.index;
+      }
+    }
+    _lastCategoryFlags = map;
+  }
+
+  // Returns true if any item's watchlist/completed flag changed since last snapshot.
+  bool _categoryChangedSinceLastSnapshot() {
+    final cur = <int, int>{};
+    for (final s in storage.all) {
+      if (s.flag != WatchFlag.none) {
+        cur[s.id] = s.flag.index;
+      }
+    }
+    final changed = !_mapIntEquals(cur, _lastCategoryFlags);
+    if (changed) {
+      _lastCategoryFlags = cur;
+    }
+    return changed;
+  }
+
+  bool _mapIntEquals(Map<int, int> a, Map<int, int> b) {
+    if (a.length != b.length) return false;
+    for (final k in a.keys) {
+      if (b[k] != a[k]) return false;
+    }
+    return true;
   }
 }
 

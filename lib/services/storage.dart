@@ -166,6 +166,7 @@ class AppStorage extends ChangeNotifier {
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     _load();
+  _purgeSeedDemoIfPresent();
   }
 
 // READS
@@ -352,6 +353,16 @@ class AppStorage extends ChangeNotifier {
   // No seed demo on first run; start empty and persist empty list
   _shows.clear();
   _persist();
+  }
+
+  /// Remove the old demo seed entry (e.g., Bluey id=1) if it exists in saved data.
+  void _purgeSeedDemoIfPresent() {
+    final idx = _shows.indexWhere((s) => s.id == 1 && s.title == 'Bluey');
+    if (idx != -1) {
+      _shows.removeAt(idx);
+      _persist();
+      notifyListeners();
+    }
   }
 }
 

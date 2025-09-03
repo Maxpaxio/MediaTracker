@@ -22,6 +22,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   late final ShowsSearchController search;
+  final _searchFocus = FocusNode();
 
   @override
   void initState() {
@@ -33,6 +34,7 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     search.removeListener(_onSearchNotify);
     search.dispose();
+  _searchFocus.dispose();
     super.dispose();
   }
 
@@ -170,6 +172,7 @@ class _HomePageState extends State<HomePage> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: TextField(
+                  focusNode: _searchFocus,
                   controller: search.text,
                   onChanged: search.onChanged,
                   onSubmitted: search.onChanged,
@@ -180,7 +183,10 @@ class _HomePageState extends State<HomePage> {
                     suffixIcon: hasQuery
                         ? IconButton(
                             icon: const Icon(Icons.close),
-                            onPressed: search.clear,
+                            onPressed: () {
+                              search.clear();
+                              _searchFocus.requestFocus();
+                            },
                             tooltip: 'Clear',
                           )
                         : null,

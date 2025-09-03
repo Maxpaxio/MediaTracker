@@ -23,6 +23,7 @@ class FilmsPage extends StatefulWidget {
 
 class _FilmsPageState extends State<FilmsPage> {
   late final MoviesSearchController search;
+  final _searchFocus = FocusNode();
 
   @override
   void initState() {
@@ -34,6 +35,7 @@ class _FilmsPageState extends State<FilmsPage> {
   void dispose() {
     search.removeListener(_onSearchNotify);
     search.dispose();
+  _searchFocus.dispose();
     super.dispose();
   }
 
@@ -130,6 +132,7 @@ class _FilmsPageState extends State<FilmsPage> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: TextField(
+                focusNode: _searchFocus,
                 controller: search.text,
                 onChanged: search.onChanged,
                 onSubmitted: search.onChanged,
@@ -140,7 +143,10 @@ class _FilmsPageState extends State<FilmsPage> {
                   suffixIcon: hasQuery
                       ? IconButton(
                           icon: const Icon(Icons.close),
-                          onPressed: search.clear,
+                          onPressed: () {
+                            search.clear();
+                            _searchFocus.requestFocus();
+                          },
                           tooltip: 'Clear',
                         )
                       : null,

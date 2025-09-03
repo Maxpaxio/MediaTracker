@@ -62,7 +62,7 @@ class _MediaHomePageState extends State<MediaHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final hasQuery = search.text.text.isNotEmpty;
+  final hasQuery = search.text.text.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         title: const Text('MediaTracker'),
@@ -140,9 +140,19 @@ class _MediaHomePageState extends State<MediaHomePage> {
                 onChanged: search.onChanged,
                 onSubmitted: search.onChanged,
                 textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Search movies, TV shows, and people…',
-                  prefixIcon: Icon(Icons.search),
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: hasQuery
+                      ? IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Clear',
+                          onPressed: () {
+                            search.clear();
+                            _focus.requestFocus();
+                          },
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(height: 16),
