@@ -496,28 +496,35 @@ class _ProvidersBlock extends StatelessWidget {
       }
     }
 
-    // 1) Attempt app deep links (any one that can launch)
+    // 1) Attempt app deep links
+    bool anyAppCandidate = false;
     for (final uri in appLinks) {
       try {
         if (await canLaunchUrl(uri)) {
-          final ok = await launchUrl(
+          anyAppCandidate = true;
+          // Even if launchUrl reports false on some platforms, the OS may still
+          // hand off to the app. To prevent double-open, do not fall back to web
+          // when at least one app candidate exists.
+          final _ = await launchUrl(
             uri,
             mode: LaunchMode.externalNonBrowserApplication,
           );
-          if (ok) return;
+          return; // stop here regardless of result to avoid also opening web
         }
       } catch (_) {
-        // try next
+        // try next app candidate
       }
     }
 
-    // 2) Fallback to web (first one that launches)
-    for (final uri in webLinks) {
-      try {
-        final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (ok) return;
-      } catch (_) {
-        // try next
+    // 2) Fallback to web only if there were no app-scheme candidates
+    if (!anyAppCandidate) {
+      for (final uri in webLinks) {
+        try {
+          final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (ok) return;
+        } catch (_) {
+          // try next
+        }
       }
     }
   }
