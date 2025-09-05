@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/tmdb_api.dart';
 import '../services/storage.dart';
 
@@ -91,6 +92,10 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
                   : Container(width: 32, height: 32, color: const Color(0xFF2F2F35)),
             ),
             title: Text(name),
+            onTap: () async {
+              Navigator.pop(context);
+              await _launchProviderByName(name);
+            },
           );
         }
 
@@ -134,6 +139,104 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
     );
   }
 
+  // --- Deep link helpers: open app homepage when possible ---
+  static final Map<String, List<String>> _providerLaunchOrder = {
+    'netflix': ['nflx://www.netflix.com', 'https://www.netflix.com'],
+    'disney+': ['disneyplus://', 'https://www.disneyplus.com'],
+    'disney plus': ['disneyplus://', 'https://www.disneyplus.com'],
+    'max': ['hbomax://open', 'https://www.max.com'],
+    'hbo max': ['hbomax://open', 'https://www.max.com'],
+    'amazon prime video': ['primevideo://', 'https://www.primevideo.com'],
+    'prime video': ['primevideo://', 'https://www.primevideo.com'],
+    'apple tv+': ['tv://', 'https://tv.apple.com'],
+    'apple tv': ['tv://', 'https://tv.apple.com'],
+    'viaplay': ['viaplay://open', 'https://viaplay.com'],
+    'youtube': ['vnd.youtube://', 'https://www.youtube.com'],
+    'skyshowtime': ['skyshowtime://', 'https://www.skyshowtime.com'],
+    'svt play': [
+      'svtplay://open',
+      'svtplay://',
+      'https://www.svtplay.se',
+      'https://svtplay.se',
+    ],
+    'svtplay': [
+      'svtplay://open',
+      'svtplay://',
+      'https://www.svtplay.se',
+      'https://svtplay.se',
+    ],
+    'tele2 play': ['tele2play://', 'https://www.tele2play.se'],
+    'tv4 play': ['tv4play://', 'https://www.tv4play.se'],
+    'tv4': ['tv4play://', 'https://www.tv4play.se'],
+    'sf anytime': [
+      'sfanytime://open',
+      'sfanytime://',
+      'https://www.sfanytime.com/se',
+      'https://sfanytime.com/se',
+      'https://www.sfanytime.com',
+      'https://sfanytime.com',
+    ],
+    'hulu': ['hulu://', 'https://www.hulu.com'],
+    'paramount+': ['paramountplus://', 'https://www.paramountplus.com'],
+    'paramount plus': ['paramountplus://', 'https://www.paramountplus.com'],
+    'peacock': ['peacock://', 'https://www.peacocktv.com'],
+  };
+
+  String _normalize(String s) => s.toLowerCase().trim();
+
+  Future<void> _launchProviderByName(String? providerName) async {
+    if (providerName == null || providerName.isEmpty) return;
+    final key = _normalize(providerName);
+
+    List<String>? candidates = _providerLaunchOrder[key];
+    candidates ??= _providerLaunchOrder.entries
+        .firstWhere(
+          (e) => key.contains(e.key),
+          orElse: () => const MapEntry<String, List<String>>('', []),
+        )
+        .value;
+    if (candidates.isEmpty) return;
+
+    final appLinks = <Uri>[];
+    final webLinks = <Uri>[];
+    for (final s in candidates) {
+      final uri = Uri.tryParse(s);
+      if (uri == null) continue;
+      final scheme = uri.scheme.toLowerCase();
+      if (scheme == 'http' || scheme == 'https') {
+        webLinks.add(uri);
+      } else {
+        appLinks.add(uri);
+      }
+    }
+
+    bool anyAppCandidate = false;
+    for (final uri in appLinks) {
+      try {
+        if (await canLaunchUrl(uri)) {
+          anyAppCandidate = true;
+          final _ = await launchUrl(
+            uri,
+            mode: LaunchMode.externalNonBrowserApplication,
+          );
+          return; // do not fall back to web to avoid double-open
+        }
+      } catch (_) {
+        // continue
+      }
+    }
+    if (!anyAppCandidate) {
+      for (final uri in webLinks) {
+        try {
+          final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (ok) return;
+        } catch (_) {
+          // continue
+        }
+      }
+    }
+  }
+
   Widget _placeholder(double s) => Container(
         width: s,
         height: s,
@@ -158,16 +261,23 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
 
     final badges = _streaming.map((m) {
       final logoPath = (m['logo_path'] as String?) ?? '';
-      if (logoPath.isEmpty) return _placeholder(size);
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(size * 0.18),
-        child: Image.network(
-          '$_imgBase/w92$logoPath',
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => _placeholder(size),
-        ),
+      final name = (m['provider_name'] as String?) ?? '';
+      Widget img = _placeholder(size);
+      if (logoPath.isNotEmpty) {
+        img = ClipRRect(
+          borderRadius: BorderRadius.circular(size * 0.18),
+          child: Image.network(
+            '$_imgBase/w92$logoPath',
+            width: size,
+            height: size,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => _placeholder(size),
+          ),
+        );
+      }
+      return GestureDetector(
+        onTap: () => _launchProviderByName(name),
+        child: Tooltip(message: name.isNotEmpty ? name : 'Open provider', child: img),
       );
     }).toList();
 
