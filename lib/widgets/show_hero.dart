@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui show Image, ImageByteFormat, decodeImageFromList;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -61,11 +60,7 @@ class _ShowHeroState extends State<ShowHero> {
   ui.Image? _decoded;
   Color? _sideFill;
 
-  // Also keep web bytes (so we don’t fetch twice on web)
-  Uint8List? _webBytes;
-
-  // Non-web stream (for decoding once)
-  ImageStream? _stream;
+  // Decoding paths do not store fields that are not needed later to avoid lints
 
   @override
   void didChangeDependencies() {
@@ -100,8 +95,6 @@ class _ShowHeroState extends State<ShowHero> {
       if (!mounted) return;
       if (res.statusCode == 200) {
         final bytes = res.bodyBytes;
-        _webBytes = bytes;
-
         // Decode via callback-style API (returns void)
         ui.decodeImageFromList(bytes, (ui.Image img) async {
           if (!mounted) return;
@@ -109,10 +102,11 @@ class _ShowHeroState extends State<ShowHero> {
 
           // Sample edge colors from decoded image (now allowed)
           final c = await _sampleEdgeColor(img);
-          if (mounted)
+          if (mounted) {
             setState(() {
               _sideFill = c;
             });
+          }
         });
 
         // Rebuild once bytes are present (even if decode callback lands a tick later)
@@ -127,7 +121,6 @@ class _ShowHeroState extends State<ShowHero> {
   void _subscribeStream(String url) {
     final provider = NetworkImage(url);
     final stream = provider.resolve(createLocalImageConfiguration(context));
-    _stream = stream;
     stream.addListener(ImageStreamListener((info, _) async {
       if (!mounted) return;
       // Use the already-decoded raster directly (no provider flicker)
@@ -135,10 +128,11 @@ class _ShowHeroState extends State<ShowHero> {
 
       // Sample edge color from the raster
       final c = await _sampleEdgeColor(info.image);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _sideFill = c;
         });
+      }
     }, onError: (_, __) {
       if (!mounted) return;
       setState(() {
@@ -149,9 +143,7 @@ class _ShowHeroState extends State<ShowHero> {
   }
 
   void _disposeImage() {
-    _stream = null;
     _decoded = null;
-    _webBytes = null;
     _sideFill = null;
   }
 

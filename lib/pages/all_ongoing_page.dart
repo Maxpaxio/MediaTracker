@@ -9,24 +9,23 @@ class AllOngoingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-  final items = StorageScope.of(context)
-    .ongoing
-    .where((s) => s.mediaType == MediaType.tv)
-    .toList();
+    final items = StorageScope.of(context)
+        .ongoing
+        .where((s) => s.mediaType == MediaType.tv)
+        .toList();
     return Scaffold(
       appBar: AppBar(title: Text('Ongoing (${items.length})')),
       body: LayoutBuilder(
         builder: (context, constraints) {
           const minCardWidth = 130.0;
-          final crossAxisCount = (constraints.maxWidth / minCardWidth)
-              .floor()
-              .clamp(3, 12);
+          final crossAxisCount =
+              (constraints.maxWidth / minCardWidth).floor().clamp(3, 12);
           return GridView.builder(
             padding: const EdgeInsets.all(16),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: crossAxisCount,
               // Allow space for a progress bar and a small label under the poster
-              childAspectRatio: 0.60,
+              childAspectRatio: 0.54,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),
@@ -78,25 +77,31 @@ class _Poster extends StatelessWidget {
                 Positioned(
                   left: cornerPad,
                   top: cornerPad,
-                  child: ProviderCornerGrid(showId: show.id, mediaType: show.mediaType),
+                  child: ProviderCornerGrid(
+                      showId: show.id, mediaType: show.mediaType),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 2),
           // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: SizedBox(
-              height: 6,
+              height: 4,
               child: LinearProgressIndicator(value: show.progress),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           // Episodes and percent
           Text(
             '$epSeen/$epTotal • $pct%',
-            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  height: 1.0,
+                ),
           ),
         ],
       ),

@@ -3,8 +3,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/storage.dart';
 import '../services/tmdb_api.dart';
+import '../services/region.dart';
+import '../services/settings_controller.dart';
 import '../widgets/show_hero.dart';
 import 'subpages/more_info_page.dart';
+import '../widgets/region_picker_button.dart';
 
 class ShowDetailArgs {
   final int showId;
@@ -30,6 +33,10 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
   List<Map<String, dynamic>> _streaming = const [];
   List<Map<String, dynamic>> _rentBuy = const [];
   bool _providersLoading = false;
+  String? _lastRegion;
+  String? _overrideRegion; // temporary page-level region
+  List<String> _availableRegions = const [];
+  Map<String, int> _regionCounts = const {};
 
   final Map<int, bool> _expanded = {}; // seasonNumber -> expanded
   final Map<int, List<String>> _episodeTitles = {}; // seasonNumber -> titles
@@ -74,9 +81,13 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
       s = storage.tryGet(id);
     }
 
-  // Providers: STRICT to SE (no fallback) and correct type
-  final mt = (s?.mediaType) ?? cached?.mediaType ?? MediaType.tv;
-  await _loadProviders(id, regionCode: 'SE', mediaType: mt);
+    // Providers: STRICT to SE (no fallback) and correct type
+    final mt = (s?.mediaType) ?? cached?.mediaType ?? MediaType.tv;
+    final settingsCtrl = SettingsScope.of(context);
+    final region =
+        settingsCtrl.effectiveRegion ?? detectRegionCode(fallback: 'US');
+    _lastRegion = region;
+    await _loadProviders(id, regionCode: region, mediaType: mt);
 
     if (!mounted) return;
     setState(() {
@@ -120,8 +131,8 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
         seasons: mergedSeasons,
       );
 
-  // Preserve ordering: update in place
-  storage.updateShow(merged);
+      // Preserve ordering: update in place
+      storage.updateShow(merged);
     } catch (_) {
       // ignore network errors
     }
@@ -181,6 +192,78 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _providersLoading = false);
+    }
+  }
+
+  Future<void> _ensureAvailableRegions(int showId, MediaType mt) async {
+    // Always ensure current base region appears (top) even if it has 0 streaming providers.
+    final settingsCtrl = SettingsScope.of(context);
+    final baseRegion =
+        (settingsCtrl.effectiveRegion ?? detectRegionCode(fallback: 'US'))
+            .toUpperCase();
+
+    // If we've already loaded once, just enforce baseRegion presence/order and exit.
+    if (_availableRegions.isNotEmpty) {
+      final hasBase = _availableRegions.contains(baseRegion);
+      if (!hasBase) {
+        setState(() {
+          _availableRegions = [baseRegion, ..._availableRegions];
+          _regionCounts = {..._regionCounts, baseRegion: _regionCounts[baseRegion] ?? 0};
+        });
+      } else if (_availableRegions.first != baseRegion) {
+        setState(() {
+          _availableRegions = [
+            baseRegion,
+            ..._availableRegions.where((c) => c != baseRegion),
+          ];
+        });
+      }
+      return;
+    }
+
+    try {
+      final entries = await _api.fetchStreamingRegionCounts(showId,
+          isMovie: mt == MediaType.movie);
+      if (!mounted) return;
+      final mapCounts = {for (final e in entries) e.code: e.count};
+
+      // If base region not in streaming list, synthesize an entry with count 0.
+      final hasBase = entries.any((e) => e.code == baseRegion);
+      final mutable = List.of(entries);
+      if (!hasBase) {
+        mutable.add((code: baseRegion, count: 0));
+        mapCounts[baseRegion] = 0;
+      }
+
+      // Sort (excluding the forced base at top): base first, then by count desc, then code asc.
+      mutable.sort((a, b) {
+        // Base region pinned: treat it as highest priority (appear first after reinsert).
+        if (a.code == baseRegion && b.code != baseRegion) return -1;
+        if (b.code == baseRegion && a.code != baseRegion) return 1;
+        final cmp = b.count.compareTo(a.count);
+        if (cmp != 0) return cmp;
+        return a.code.compareTo(b.code);
+      });
+
+      // Ensure base region is position 0 (in case count logic moved it already, still fine).
+      if (mutable.first.code != baseRegion) {
+        final baseEntry = mutable.firstWhere((e) => e.code == baseRegion);
+        mutable.removeWhere((e) => e.code == baseRegion);
+        mutable.insert(0, baseEntry);
+      }
+
+      setState(() {
+        _availableRegions = mutable.map((e) => e.code).toList();
+        _regionCounts = mapCounts;
+      });
+    } catch (_) {
+      // On error, still at least expose base region so user can see current selection.
+      if (mounted && _availableRegions.isEmpty) {
+        setState(() {
+          _availableRegions = [baseRegion];
+          _regionCounts = {baseRegion: 0};
+        });
+      }
     }
   }
 
@@ -267,6 +350,18 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     }
 
     final show = _show!;
+    final settingsCtrl = SettingsScope.of(context);
+    final baseRegion =
+        settingsCtrl.effectiveRegion ?? detectRegionCode(fallback: 'US');
+    final effectiveRegion = _overrideRegion ?? baseRegion;
+    if (_lastRegion != null &&
+        _lastRegion != effectiveRegion &&
+        !_providersLoading) {
+      _lastRegion = effectiveRegion;
+      _loadProviders(show.id,
+          regionCode: effectiveRegion, mediaType: show.mediaType);
+    }
+    _ensureAvailableRegions(show.id, show.mediaType); // fire & forget
     return Scaffold(
       appBar: AppBar(
         title: Text(show.title, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -312,7 +407,30 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
               ),
             ),
 
-          // PROVIDERS (logos + Add-to menu pinned right)
+          // PROVIDERS + Region picker
+          // Region picker row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _availableRegions.isNotEmpty
+                  ? RegionPickerButton(
+                      current: effectiveRegion,
+                      candidates: _availableRegions,
+                      counts: _regionCounts,
+                      onSelected: (code) {
+                        setState(() {
+                          _overrideRegion = code;
+                          _lastRegion = code;
+                        });
+                        _loadProviders(show.id,
+                            regionCode: code, mediaType: show.mediaType);
+                      },
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+          // Providers block below picker
           _ProvidersBlock(
             showId: show.id,
             onChanged: _refreshFromStorage,
@@ -332,8 +450,7 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
                 children: [
                   for (final season in show.seasons)
                     _SeasonTile(
-                      key:
-                          ValueKey('season-${show.id}-${season.seasonNumber}'),
+                      key: ValueKey('season-${show.id}-${season.seasonNumber}'),
                       show: show,
                       season: season,
                       seasonTitle: season.name.isNotEmpty

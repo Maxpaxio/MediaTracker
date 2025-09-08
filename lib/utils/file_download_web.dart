@@ -1,8 +1,9 @@
-// ignore_for_file: avoid_web_libraries_in_flutter
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:convert';
 import 'dart:html' as html;
 
-Future<void> downloadJsonFile(String fileName, Map<String, dynamic> json) async {
+Future<void> downloadJsonFile(
+    String fileName, Map<String, dynamic> json) async {
   final data = utf8.encode(jsonEncode(json));
   final blob = html.Blob([data], 'application/json');
   final url = html.Url.createObjectUrlFromBlob(blob);

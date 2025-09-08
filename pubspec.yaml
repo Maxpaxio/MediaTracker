@@ -24,6 +24,8 @@ dependencies:
 
   # iOS-style icons
   cupertino_icons: ^1.0.8
+  # OAuth for iOS (PKCE flow)
+  flutter_appauth: ^6.0.4
 
 
 dev_dependencies:

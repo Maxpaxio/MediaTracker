@@ -10,4 +10,13 @@ Future<GoogleSession?> googleSignInPkce({
   required Uri redirectUri,
   required List<String> scopes,
   bool silent = false,
-}) async => null;
+}) async =>
+    null;
+
+Future<GoogleSession?> googleRefresh({
+  required String clientId,
+  required Uri redirectUri,
+  required List<String> scopes,
+  required String refreshToken,
+}) async =>
+    null;

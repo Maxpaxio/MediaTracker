@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
-import '../services/tmdb_api.dart';
 import 'provider_corner_grid.dart';
 
 class CompletedPoster extends StatelessWidget {
@@ -51,12 +50,17 @@ class CompletedPoster extends StatelessWidget {
               Positioned(
                 left: cornerPad,
                 top: cornerPad,
-                child: ProviderCornerGrid(showId: show.id, mediaType: show.mediaType),
+                child: ProviderCornerGrid(
+                    showId: show.id, mediaType: show.mediaType),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(show.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
+          Text(
+            show.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );

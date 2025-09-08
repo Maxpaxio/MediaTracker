@@ -74,9 +74,9 @@ class Show {
     required this.providers,
     required this.seasons,
     this.flag = WatchFlag.none,
-  this.mediaType = MediaType.tv,
-  required this.addedAt,
-  required this.updatedAt,
+    this.mediaType = MediaType.tv,
+    required this.addedAt,
+    required this.updatedAt,
   });
 
   Show copyWith({
@@ -134,10 +134,10 @@ class Show {
         'genres': genres,
         'providers': providers,
         'flag': flag.index,
-  'type': mediaType.index,
+        'type': mediaType.index,
         'seasons': seasons.map((e) => e.toJson()).toList(),
-  'addedAt': addedAt,
-  'updatedAt': updatedAt,
+        'addedAt': addedAt,
+        'updatedAt': updatedAt,
       };
 
   factory Show.fromJson(Map<String, dynamic> m) => Show(
@@ -152,10 +152,12 @@ class Show {
         genres: (m['genres'] as List).cast<String>(),
         providers: (m['providers'] as List).cast<String>(),
         flag: WatchFlag.values[m['flag']],
-  mediaType: MediaType.values[(m['type'] as num?)?.toInt() ?? 0],
+        mediaType: MediaType.values[(m['type'] as num?)?.toInt() ?? 0],
         seasons: (m['seasons'] as List).map((e) => Season.fromJson(e)).toList(),
-  addedAt: (m['addedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
-  updatedAt: (m['updatedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
+        addedAt: (m['addedAt'] as num?)?.toInt() ??
+            DateTime.now().millisecondsSinceEpoch,
+        updatedAt: (m['updatedAt'] as num?)?.toInt() ??
+            DateTime.now().millisecondsSinceEpoch,
       );
 }
 
@@ -166,7 +168,7 @@ class AppStorage extends ChangeNotifier {
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     _load();
-  _purgeSeedDemoIfPresent();
+    _purgeSeedDemoIfPresent();
   }
 
 // READS
@@ -204,7 +206,8 @@ class AppStorage extends ChangeNotifier {
       updatedAt: now,
     );
     // If addedAt was not set meaningfully (e.g., 0), default to now.
-    final normalized = withTs.addedAt > 0 ? withTs : withTs.copyWith(addedAt: now);
+    final normalized =
+        withTs.addedAt > 0 ? withTs : withTs.copyWith(addedAt: now);
     _shows.add(normalized);
     _persist();
     notifyListeners();
@@ -271,7 +274,7 @@ class AppStorage extends ChangeNotifier {
     final newShow = base.copyWith(
       seasons: allDone,
       flag: WatchFlag.completed,
-  updatedAt: DateTime.now().millisecondsSinceEpoch,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
 
     if (idx == -1) {
@@ -350,9 +353,9 @@ class AppStorage extends ChangeNotifier {
         ..addAll(list.map(Show.fromJson));
       return;
     }
-  // No seed demo on first run; start empty and persist empty list
-  _shows.clear();
-  _persist();
+    // No seed demo on first run; start empty and persist empty list
+    _shows.clear();
+    _persist();
   }
 
   /// Remove the old demo seed entry (e.g., Bluey id=1) if it exists in saved data.
@@ -364,9 +367,7 @@ class AppStorage extends ChangeNotifier {
       notifyListeners();
     }
   }
-}
 
-extension AppStorageAdmin on AppStorage {
   /// Replace all shows with the provided list; persists and notifies.
   void replaceAll(List<Show> items) {
     _shows

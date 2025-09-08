@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
-import '../services/show_search_controller.dart';
 import '../services/multi_search_controller.dart';
 import '../services/sync_file_service.dart';
 import 'home_page.dart';
 import 'films_page.dart';
 import 'show_detail_page.dart';
 import 'sync_connect_page.dart';
+import 'subpages/more_info_page.dart'; // for PersonCreditsPage
 
 class MediaHomePage extends StatefulWidget {
   static const route = '/';
@@ -23,7 +23,7 @@ class _MediaHomePageState extends State<MediaHomePage> {
   @override
   void initState() {
     super.initState();
-  search = MultiSearchController()..addListener(_onSearchNotify);
+    search = MultiSearchController()..addListener(_onSearchNotify);
     // Autofocus when landing here
     Future.microtask(() => _focus.requestFocus());
   }
@@ -62,7 +62,7 @@ class _MediaHomePageState extends State<MediaHomePage> {
 
   @override
   Widget build(BuildContext context) {
-  final hasQuery = search.text.text.isNotEmpty;
+    final hasQuery = search.text.text.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         title: const Text('MediaTracker'),
@@ -100,7 +100,9 @@ class _MediaHomePageState extends State<MediaHomePage> {
             padding: EdgeInsets.zero,
             children: [
               const DrawerHeader(
-                child: Text('MediaTracker', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                child: Text('MediaTracker',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               ),
               ListTile(
                 leading: const Icon(Icons.search),
@@ -110,18 +112,26 @@ class _MediaHomePageState extends State<MediaHomePage> {
               ListTile(
                 leading: const Icon(Icons.live_tv),
                 title: const Text('TV'),
-                onTap: () => Navigator.pushReplacementNamed(context, HomePage.route),
+                onTap: () =>
+                    Navigator.pushReplacementNamed(context, HomePage.route),
               ),
               ListTile(
                 leading: const Icon(Icons.movie),
                 title: const Text('Films'),
-                onTap: () => Navigator.pushReplacementNamed(context, FilmsPage.route),
+                onTap: () =>
+                    Navigator.pushReplacementNamed(context, FilmsPage.route),
               ),
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.cloud),
                 title: const Text('Cloud storage'),
-                onTap: () => Navigator.pushNamed(context, SyncConnectPage.route),
+                onTap: () =>
+                    Navigator.pushNamed(context, SyncConnectPage.route),
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Settings'),
+                onTap: () => Navigator.pushNamed(context, '/settings'),
               ),
             ],
           ),
@@ -160,13 +170,15 @@ class _MediaHomePageState extends State<MediaHomePage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.pushReplacementNamed(context, HomePage.route),
+                    onPressed: () =>
+                        Navigator.pushReplacementNamed(context, HomePage.route),
                     icon: const Icon(Icons.live_tv),
                     label: const Text('TV'),
                   ),
                   const SizedBox(width: 12),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.pushNamed(context, FilmsPage.route),
+                    onPressed: () =>
+                        Navigator.pushNamed(context, FilmsPage.route),
                     icon: const Icon(Icons.movie),
                     label: const Text('Films'),
                   ),
@@ -282,13 +294,14 @@ class _MultiSearchResults extends StatelessWidget {
           case MultiKind.person:
             final name = item.personName ?? '';
             final profile = item.personProfileUrl;
-            final knownFor = (item.knownForTitles ?? const [])
-                .take(3)
-                .join(' • ');
+            final knownFor =
+                (item.knownForTitles ?? const []).take(3).join(' • ');
             return ListTile(
-              onTap: () {
-                // For now, no person detail page; later we can add cast filmography.
-              },
+              onTap: () => Navigator.pushNamed(
+                context,
+                PersonCreditsPage.route,
+                arguments: item.personId,
+              ),
               leading: CircleAvatar(
                 radius: 24,
                 backgroundColor: const Color(0xFF2C2C32),

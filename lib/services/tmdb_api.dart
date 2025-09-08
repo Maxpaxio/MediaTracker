@@ -9,6 +9,123 @@ class TmdbApi {
   static const _key = '6f8c0bbf88560ad26d47fcfa5f12cdc4';
 
   // ---------------- WATCH PROVIDERS (STRICT REGION) ----------------
+  /// Fetch raw provider regions available for a show (TV or movie).
+  Future<List<String>> fetchAvailableProviderRegions(int id,
+      {required bool isMovie}) async {
+    final path = isMovie ? 'movie' : 'tv';
+    final uri = Uri.parse('$_base/$path/$id/watch/providers')
+        .replace(queryParameters: {'api_key': _key});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return const [];
+    final root =
+        (json.decode(res.body) as Map?)?.cast<String, dynamic>() ?? const {};
+    final results =
+        (root['results'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final codes = results.keys
+        .map((e) => e.toString().toUpperCase())
+        .where((e) => e.length == 2)
+        .toList();
+    codes.sort();
+    return codes;
+  }
+
+  /// Like [fetchAvailableProviderRegions] but also returns a count of unique providers
+  /// (streaming + rent/buy) per region for quick UI hinting.
+  Future<List<({String code, int count})>>
+      fetchAvailableProviderRegionsWithCounts(int id,
+          {required bool isMovie}) async {
+    final path = isMovie ? 'movie' : 'tv';
+    final uri = Uri.parse('$_base/$path/$id/watch/providers')
+        .replace(queryParameters: {'api_key': _key});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return const [];
+    final root =
+        (json.decode(res.body) as Map?)?.cast<String, dynamic>() ?? const {};
+    final results =
+        (root['results'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final out = <({String code, int count})>[];
+    for (final entry in results.entries) {
+      final code = entry.key.toUpperCase();
+      final picked = (entry.value as Map?)?.cast<String, dynamic>();
+      if (picked == null) continue;
+      List<Map<String, dynamic>> norm(String key) {
+        final list = (picked[key] as List?) ?? const [];
+        return list
+            .map<Map<String, dynamic>>(
+                (e) => (e as Map?)?.cast<String, dynamic>() ?? const {})
+            .toList();
+      }
+
+      final flatrate = norm('flatrate');
+      final free = norm('free');
+      final ads = norm('ads');
+      final rent = norm('rent');
+      final buy = norm('buy');
+      final uniq = <int>{};
+      void add(List<Map<String, dynamic>> l) {
+        for (final m in l) {
+          final id = (m['provider_id'] as num?)?.toInt() ?? -1;
+          if (id > 0) uniq.add(id);
+        }
+      }
+
+      add(flatrate);
+      add(free);
+      add(ads);
+      add(rent);
+      add(buy);
+      out.add((code: code, count: uniq.length));
+    }
+    out.sort((a, b) => a.code.compareTo(b.code));
+    return out;
+  }
+
+  /// Streaming-only (flatrate+free+ads) region counts. Excludes regions that only
+  /// have rent/buy options.
+  Future<List<({String code, int count})>> fetchStreamingRegionCounts(int id,
+      {required bool isMovie}) async {
+    final path = isMovie ? 'movie' : 'tv';
+    final uri = Uri.parse('$_base/$path/$id/watch/providers')
+        .replace(queryParameters: {'api_key': _key});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return const [];
+    final root =
+        (json.decode(res.body) as Map?)?.cast<String, dynamic>() ?? const {};
+    final results =
+        (root['results'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final out = <({String code, int count})>[];
+    for (final entry in results.entries) {
+      final code = entry.key.toUpperCase();
+      final picked = (entry.value as Map?)?.cast<String, dynamic>();
+      if (picked == null) continue;
+      List<Map<String, dynamic>> norm(String key) {
+        final list = (picked[key] as List?) ?? const [];
+        return list
+            .map<Map<String, dynamic>>(
+                (e) => (e as Map?)?.cast<String, dynamic>() ?? const {})
+            .toList();
+      }
+
+      final flatrate = norm('flatrate');
+      final free = norm('free');
+      final ads = norm('ads');
+      final streaming = <int>{};
+      void add(List<Map<String, dynamic>> l) {
+        for (final m in l) {
+          final id = (m['provider_id'] as num?)?.toInt() ?? -1;
+          if (id > 0) streaming.add(id);
+        }
+      }
+
+      add(flatrate);
+      add(free);
+      add(ads);
+      if (streaming.isEmpty) continue; // skip rent/buy-only regions
+      out.add((code: code, count: streaming.length));
+    }
+    out.sort((a, b) => a.code.compareTo(b.code));
+    return out;
+  }
 
   /// Region-specific watch providers for a TV show.
   ///
@@ -87,10 +204,11 @@ class TmdbApi {
 
   /// Region-specific watch providers for a Movie (same shape as TV version).
   Future<
-      ({
-        List<Map<String, dynamic>> streaming,
-        List<Map<String, dynamic>> rentBuy
-      })> fetchMovieWatchProviders(int movieId, {required String region}) async {
+          ({
+            List<Map<String, dynamic>> streaming,
+            List<Map<String, dynamic>> rentBuy
+          })>
+      fetchMovieWatchProviders(int movieId, {required String region}) async {
     final uri = Uri.parse('$_base/movie/$movieId/watch/providers')
         .replace(queryParameters: {'api_key': _key});
     final res = await http.get(uri);
@@ -170,18 +288,18 @@ class TmdbApi {
     }
     final m = (json.decode(res.body) as Map).cast<String, dynamic>();
 
-    String _string(dynamic v) => (v ?? '').toString();
-    double _double(dynamic v) => (v is num) ? v.toDouble() : 0.0;
-    int _int(dynamic v) => (v is num) ? v.toInt() : 0;
+    String asStr(dynamic v) => (v ?? '').toString();
+    double asDouble(dynamic v) => (v is num) ? v.toDouble() : 0.0;
+    int asInt(dynamic v) => (v is num) ? v.toInt() : 0;
 
-    final title = _string(m['name'] ?? m['original_name'] ?? m['title']);
-    final overview = _string(m['overview']);
-    final posterPath = _string(m['poster_path']);
-    final backdropPath = _string(m['backdrop_path']);
-    final firstAir = _string(m['first_air_date']);
-    final lastAirStr = _string(m['last_air_date']);
+    final title = asStr(m['name'] ?? m['original_name'] ?? m['title']);
+    final overview = asStr(m['overview']);
+    final posterPath = asStr(m['poster_path']);
+    final backdropPath = asStr(m['backdrop_path']);
+    final firstAir = asStr(m['first_air_date']);
+    final lastAirStr = asStr(m['last_air_date']);
     final lastAir = lastAirStr.isEmpty ? null : lastAirStr;
-    final vote = _double(m['vote_average']);
+    final vote = asDouble(m['vote_average']);
 
     final genres = ((m['genres'] as List?) ?? const [])
         .map((e) => (e as Map?)?['name'])
@@ -191,18 +309,18 @@ class TmdbApi {
     final seasons = ((m['seasons'] as List?) ?? const [])
         .map((e) =>
             (e as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{})
-        .where((e) => _int(e['season_number']) >= 1)
+        .where((e) => asInt(e['season_number']) >= 1)
         .map((e) => Season(
-              seasonNumber: _int(e['season_number']),
-              name: _string(e['name']), // (en-US gives "Season 1" etc.)
-              episodeCount: _int(e['episode_count']),
+              seasonNumber: asInt(e['season_number']),
+              name: asStr(e['name']), // (en-US gives "Season 1" etc.)
+              episodeCount: asInt(e['episode_count']),
               watched: 0,
             ))
         .toList(growable: false);
 
     final now = DateTime.now().millisecondsSinceEpoch;
     return Show(
-      id: _int(m['id']),
+      id: asInt(m['id']),
       title: title,
       overview: overview,
       posterUrl: posterPath.isNotEmpty ? '$_img/w342$posterPath' : '',
@@ -229,16 +347,16 @@ class TmdbApi {
     }
     final m = (json.decode(res.body) as Map).cast<String, dynamic>();
 
-    String _string(dynamic v) => (v ?? '').toString();
-    double _double(dynamic v) => (v is num) ? v.toDouble() : 0.0;
-    int _int(dynamic v) => (v is num) ? v.toInt() : 0;
+    String asStr2(dynamic v) => (v ?? '').toString();
+    double asDouble2(dynamic v) => (v is num) ? v.toDouble() : 0.0;
+    int asInt2(dynamic v) => (v is num) ? v.toInt() : 0;
 
-    final title = _string(m['title'] ?? m['original_title']);
-    final overview = _string(m['overview']);
-    final posterPath = _string(m['poster_path']);
-    final backdropPath = _string(m['backdrop_path']);
-    final releaseDate = _string(m['release_date']);
-    final vote = _double(m['vote_average']);
+    final title = asStr2(m['title'] ?? m['original_title']);
+    final overview = asStr2(m['overview']);
+    final posterPath = asStr2(m['poster_path']);
+    final backdropPath = asStr2(m['backdrop_path']);
+    final releaseDate = asStr2(m['release_date']);
+    final vote = asDouble2(m['vote_average']);
 
     final genres = ((m['genres'] as List?) ?? const [])
         .map((e) => (e as Map?)?['name'])
@@ -247,7 +365,7 @@ class TmdbApi {
 
     final now = DateTime.now().millisecondsSinceEpoch;
     return Show(
-      id: _int(m['id']),
+      id: asInt2(m['id']),
       title: title,
       overview: overview,
       posterUrl: posterPath.isNotEmpty ? '$_img/w342$posterPath' : '',
@@ -289,14 +407,15 @@ class TmdbApi {
   // ---------------- MORE INFO (creators/companies/runtime) ----------------
 
   /// Fetch extra details for the More Info page: creators, companies, runtimes, etc.
-  Future<({
-    List<String> creators,
-    List<({String name, String logoPath})> companies,
-    List<int> episodeRunTimes,
-    String firstAirDate,
-    double rating,
-    List<String> genres,
-  })> fetchShowExtras(int showId) async {
+  Future<
+      ({
+        List<String> creators,
+        List<({String name, String logoPath})> companies,
+        List<int> episodeRunTimes,
+        String firstAirDate,
+        double rating,
+        List<String> genres,
+      })> fetchShowExtras(int showId) async {
     final uri = Uri.parse('$_base/tv/$showId').replace(
       queryParameters: {
         'api_key': _key,
@@ -349,13 +468,14 @@ class TmdbApi {
   }
 
   /// Movie extras for More Info: companies, runtime, release date, rating, genres.
-  Future<({
-    List<({String name, String logoPath})> companies,
-    int runtime,
-    String releaseDate,
-    double rating,
-    List<String> genres,
-  })> fetchMovieExtras(int movieId) async {
+  Future<
+      ({
+        List<({String name, String logoPath})> companies,
+        int runtime,
+        String releaseDate,
+        double rating,
+        List<String> genres,
+      })> fetchMovieExtras(int movieId) async {
     final uri = Uri.parse('$_base/movie/$movieId').replace(
       queryParameters: {
         'api_key': _key,
@@ -413,6 +533,7 @@ class TmdbApi {
 
     List<Map<String, dynamic>> list = cast.map<Map<String, dynamic>>((e) {
       final mm = (e as Map?)?.cast<String, dynamic>() ?? const {};
+      final pid = (mm['id'] as num?)?.toInt() ?? 0;
       final name = (mm['name'] as String?) ?? '';
       final profilePath = (mm['profile_path'] as String?) ?? '';
       final roles = (mm['roles'] as List?) ?? const [];
@@ -427,6 +548,7 @@ class TmdbApi {
         }
       }
       return {
+        'id': pid,
         'name': name,
         'profile_path': profilePath,
         'character': character,
@@ -455,11 +577,13 @@ class TmdbApi {
 
     List<Map<String, dynamic>> list = cast.map<Map<String, dynamic>>((e) {
       final mm = (e as Map?)?.cast<String, dynamic>() ?? const {};
+      final pid = (mm['id'] as num?)?.toInt() ?? 0;
       final name = (mm['name'] as String?) ?? '';
       final profilePath = (mm['profile_path'] as String?) ?? '';
       final character = (mm['character'] as String?) ?? '';
       final order = (mm['order'] as num?)?.toInt() ?? 9999;
       return {
+        'id': pid,
         'name': name,
         'profile_path': profilePath,
         'character': character,
@@ -469,6 +593,70 @@ class TmdbApi {
 
     list.sort((a, b) => (a['order'] as int).compareTo(b['order'] as int));
     if (list.length > 10) list = list.sublist(0, 10);
+    return list;
+  }
+
+  // ---------------- PERSON DETAILS & CREDITS ----------------
+
+  /// Basic person details (name, profile path, biography snippet).
+  Future<({String name, String profilePath, String biography})> fetchPerson(
+      int personId) async {
+    final uri = Uri.parse('$_base/person/$personId')
+        .replace(queryParameters: {'api_key': _key, 'language': 'en-US'});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      return (name: 'Unknown', profilePath: '', biography: '');
+    }
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    return (
+      name: (m['name'] as String?) ?? 'Unknown',
+      profilePath: (m['profile_path'] as String?) ?? '',
+      biography: (m['biography'] as String?) ?? '',
+    );
+  }
+
+  /// Combined credits (movies + TV) for a person. Each map contains:
+  /// id, media_type (movie|tv), title, character, poster_path, year, vote.
+  Future<List<Map<String, dynamic>>> fetchPersonCombinedCredits(
+      int personId) async {
+    final uri = Uri.parse('$_base/person/$personId/combined_credits')
+        .replace(queryParameters: {'api_key': _key, 'language': 'en-US'});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return const [];
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    final cast = (m['cast'] as List?) ?? const [];
+    final list = cast.map<Map<String, dynamic>>((e) {
+      final mm = (e as Map?)?.cast<String, dynamic>() ?? const {};
+      final mediaType = (mm['media_type'] as String?) ?? '';
+      final id = (mm['id'] as num?)?.toInt() ?? 0;
+      final title = (mediaType == 'movie')
+          ? (mm['title'] as String?) ?? (mm['original_title'] as String?) ?? ''
+          : (mm['name'] as String?) ?? (mm['original_name'] as String?) ?? '';
+      final role = (mm['character'] as String?) ?? '';
+      final poster = (mm['poster_path'] as String?) ?? '';
+      final date = (mediaType == 'movie')
+          ? (mm['release_date'] as String?) ?? ''
+          : (mm['first_air_date'] as String?) ?? '';
+      final year = date.length >= 4 ? date.substring(0, 4) : '';
+      final vote = (mm['vote_average'] as num?)?.toDouble() ?? 0.0;
+      return {
+        'id': id,
+        'media_type': mediaType,
+        'title': title,
+        'character': role,
+        'poster_path': poster,
+        'year': year,
+        'vote': vote,
+      };
+    }).toList();
+    // Sort credits by year desc then vote desc.
+    list.sort((a, b) {
+      final ya = int.tryParse((a['year'] as String?) ?? '') ?? 0;
+      final yb = int.tryParse((b['year'] as String?) ?? '') ?? 0;
+      final cmpYear = yb.compareTo(ya);
+      if (cmpYear != 0) return cmpYear;
+      return (b['vote'] as double).compareTo(a['vote'] as double);
+    });
     return list;
   }
 }

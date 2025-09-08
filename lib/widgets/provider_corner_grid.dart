@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/tmdb_api.dart';
 import '../services/storage.dart';
+import '../services/region.dart';
+import '../services/settings_controller.dart';
 
 class ProviderCornerGrid extends StatefulWidget {
-  const ProviderCornerGrid({super.key, required this.showId, required this.mediaType, this.size = 28});
+  const ProviderCornerGrid(
+      {super.key,
+      required this.showId,
+      required this.mediaType,
+      this.size = 28});
   final int showId;
   final MediaType mediaType;
   final double size; // badge size (match checkmark/bookmark)
@@ -25,11 +31,22 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
   bool _loading = true;
   bool _hasMoreStreaming = false;
   bool _hasRentBuy = false;
+  String? _regionUsed;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final settings = SettingsScope.of(context);
+    final region = settings.effectiveRegion ?? detectRegionCode(fallback: 'US');
+    if (_regionUsed != null && _regionUsed != region) {
+      _load(forceRegion: region);
+    }
   }
 
   @override
@@ -39,21 +56,25 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
       // Reset and reload for the new show
       setState(() {
         _loading = true;
-  _streaming = const [];
-  _allStreaming = const [];
-  _rentBuy = const [];
-  _hasMoreStreaming = false;
-  _hasRentBuy = false;
+        _streaming = const [];
+        _allStreaming = const [];
+        _rentBuy = const [];
+        _hasMoreStreaming = false;
+        _hasRentBuy = false;
       });
       _load();
     }
   }
 
-  Future<void> _load() async {
+  Future<void> _load({String? forceRegion}) async {
     try {
-    final res = widget.mediaType == MediaType.movie
-      ? await _api.fetchMovieWatchProviders(widget.showId, region: 'SE')
-      : await _api.fetchWatchProviders(widget.showId, region: 'SE');
+      final settings = SettingsScope.of(context);
+      final region = forceRegion ??
+          settings.effectiveRegion ??
+          detectRegionCode(fallback: 'US');
+      final res = widget.mediaType == MediaType.movie
+          ? await _api.fetchMovieWatchProviders(widget.showId, region: region)
+          : await _api.fetchWatchProviders(widget.showId, region: region);
       final streaming = (res.streaming).cast<Map<String, dynamic>>();
       final rentBuy = (res.rentBuy).cast<Map<String, dynamic>>();
       if (!mounted) return;
@@ -62,8 +83,11 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
         _rentBuy = rentBuy;
         _hasRentBuy = _rentBuy.isNotEmpty;
         _hasMoreStreaming = _allStreaming.length > 3;
-        _streaming = _allStreaming.take(3).toList(growable: false); // max 3 streaming logos
+        _streaming = _allStreaming
+            .take(3)
+            .toList(growable: false); // max 3 streaming logos
         _loading = false;
+        _regionUsed = region;
       });
     } catch (_) {
       if (!mounted) return;
@@ -88,8 +112,10 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: logoPath.isNotEmpty
-                  ? Image.network('$_imgBase/w92$logoPath', width: 32, height: 32, fit: BoxFit.contain)
-                  : Container(width: 32, height: 32, color: const Color(0xFF2F2F35)),
+                  ? Image.network('$_imgBase/w92$logoPath',
+                      width: 32, height: 32, fit: BoxFit.contain)
+                  : Container(
+                      width: 32, height: 32, color: const Color(0xFF2F2F35)),
             ),
             title: Text(name),
             onTap: () async {
@@ -119,14 +145,16 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
                 if (_allStreaming.isNotEmpty) ...[
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text('Streaming', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text('Streaming',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                   ..._allStreaming.map(logoTile),
                 ],
                 if (_rentBuy.isNotEmpty) ...[
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text('Rent/Buy', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text('Rent/Buy',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                   ..._rentBuy.map(logoTile),
                 ],
@@ -248,16 +276,16 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
 
   @override
   Widget build(BuildContext context) {
-  if (_loading) return const SizedBox.shrink();
-  final showEllipsis = _hasMoreStreaming || _hasRentBuy;
-  if (_streaming.isEmpty && !showEllipsis) return const SizedBox.shrink();
+    if (_loading) return const SizedBox.shrink();
+    final showEllipsis = _hasMoreStreaming || _hasRentBuy;
+    if (_streaming.isEmpty && !showEllipsis) return const SizedBox.shrink();
 
-  final size = widget.size;
-  const gap = 4.0;
-  // total items = streaming logos + optional ellipsis badge
-  final total = _streaming.length + (showEllipsis ? 1 : 0);
-  final colWidth = size; // one logo per row
-  final colHeight = total * size + (total - 1) * gap;
+    final size = widget.size;
+    const gap = 4.0;
+    // total items = streaming logos + optional ellipsis badge
+    final total = _streaming.length + (showEllipsis ? 1 : 0);
+    final colWidth = size; // one logo per row
+    final colHeight = total * size + (total - 1) * gap;
 
     final badges = _streaming.map((m) {
       final logoPath = (m['logo_path'] as String?) ?? '';
@@ -277,7 +305,8 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
       }
       return GestureDetector(
         onTap: () => _launchProviderByName(name),
-        child: Tooltip(message: name.isNotEmpty ? name : 'Open provider', child: img),
+        child: Tooltip(
+            message: name.isNotEmpty ? name : 'Open provider', child: img),
       );
     }).toList();
 
@@ -296,7 +325,8 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
               borderRadius: BorderRadius.circular(size * 0.18),
             ),
             alignment: Alignment.center,
-            child: Text('…', style: TextStyle(fontSize: size * 0.9, height: 1.0)),
+            child:
+                Text('…', style: TextStyle(fontSize: size * 0.9, height: 1.0)),
           ),
         ),
       ));
@@ -306,7 +336,7 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
       width: colWidth + 6,
       height: colHeight + 6,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.12),
+        color: Colors.black.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.all(3),

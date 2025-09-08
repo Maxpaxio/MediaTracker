@@ -1,4 +1,17 @@
 {
   // Point VS Code Dart/Flutter extension to the project-bundled Flutter SDK
-  "dart.flutterSdkPath": "/workspaces/tv_trackerios/flutter"
+  "dart.flutterSdkPath": "/workspaces/tv_trackerios/flutter",
+  // Keep analyzer focused on app code only; ignore vendored SDK/native/platform folders
+  "dart.analysisExcludedFolders": [
+    "${workspaceFolder}/build",
+    "${workspaceFolder}/.dart_tool",
+    "${workspaceFolder}/flutter",
+    "${workspaceFolder}/ios",
+    "${workspaceFolder}/android",
+    "${workspaceFolder}/macos",
+    "${workspaceFolder}/linux",
+    "${workspaceFolder}/windows",
+    "${workspaceFolder}/test",
+    "${workspaceFolder}/integration_test"
+  ]
 }

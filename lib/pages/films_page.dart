@@ -5,7 +5,6 @@ import '../services/movie_search_controller.dart';
 import '../widgets/section_title.dart';
 import '../widgets/completed_poster.dart';
 import '../widgets/watchlist_poster.dart';
-import '../widgets/provider_corner_grid.dart';
 import 'all_movies_completed_page.dart';
 import 'all_movies_watchlist_page.dart';
 import 'media_home_page.dart';

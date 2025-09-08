@@ -23,12 +23,13 @@ class SyncFileService extends ChangeNotifier {
   DateTime _lastRun = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime? _lastSyncAt; // last successful sync time
   String? _lastError; // last error message (for UI)
-  Map<String, dynamic>? _lastSyncedDoc; // snapshot of last successfully synced doc
+  // Removed _lastSyncedDoc (unused)
   bool _pendingChangeSync = false; // debounce flag
   bool _suppressChangeSync = false; // avoid feedback during merge writes
   bool _syncQueued = false; // queue another sync after current finishes
   bool _autoSyncPending = false; // there is a pending auto-sync request
-  Map<int, int> _lastCategoryFlags = const {}; // id -> WatchFlag index (only non-none)
+  Map<int, int> _lastCategoryFlags =
+      const {}; // id -> WatchFlag index (only non-none)
 
   SyncFileState get state => _state;
   SyncEndpoint? get endpoint => _endpoint;
@@ -61,18 +62,18 @@ class SyncFileService extends ChangeNotifier {
         _scheduleTick();
       } catch (_) {}
     }
-  // Establish local baseline for change detection
-  _lastSyncedDoc = _toDoc(storage.all);
-  _snapshotCategoryFlags();
+    // Establish local baseline for change detection
+    // establish a local baseline for change detection if needed in future
+    _snapshotCategoryFlags();
   }
 
   Future<void> setEndpoint(SyncEndpoint ep) async {
     _endpoint = ep;
     notifyListeners();
-  // Kick an immediate sync, then schedule periodic ones via a microtask loop.
-  // Keep it lightweight for MVP; callers can also tap "Sync now".
-  // We avoid using Timer.periodic to reduce wakeups when app is backgrounded.
-  _scheduleTick();
+    // Kick an immediate sync, then schedule periodic ones via a microtask loop.
+    // Keep it lightweight for MVP; callers can also tap "Sync now".
+    // We avoid using Timer.periodic to reduce wakeups when app is backgrounded.
+    _scheduleTick();
     // Persist
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -114,7 +115,9 @@ class SyncFileService extends ChangeNotifier {
     Future<void>.delayed(const Duration(seconds: 1), () async {
       if (_endpoint == null) return; // disconnected
       final now = DateTime.now();
-  if (_autoSyncPending && now.difference(_lastRun) >= interval && _state != SyncFileState.syncing) {
+      if (_autoSyncPending &&
+          now.difference(_lastRun) >= interval &&
+          _state != SyncFileState.syncing) {
         _lastRun = now;
         try {
           await _maybeRefreshToken();
@@ -143,7 +146,6 @@ class SyncFileService extends ChangeNotifier {
       }
       // Replace local with merged to keep consistent ordering/content.
       storage.replaceAll(_fromDoc(merged));
-      _lastSyncedDoc = merged;
       _lastSyncAt = DateTime.now();
       _lastError = null;
       _state = SyncFileState.idle;
@@ -210,10 +212,10 @@ class SyncFileService extends ChangeNotifier {
   Map<String, dynamic> _merge(
       Map<String, dynamic>? remote, Map<String, dynamic> local) {
     if (remote == null) return local;
-    final rItems = (remote['items'] as List? ?? const [])
-        .cast<Map<String, dynamic>>();
-    final lItems = (local['items'] as List? ?? const [])
-        .cast<Map<String, dynamic>>();
+    final rItems =
+        (remote['items'] as List? ?? const []).cast<Map<String, dynamic>>();
+    final lItems =
+        (local['items'] as List? ?? const []).cast<Map<String, dynamic>>();
 
     final byId = <int, Map<String, dynamic>>{};
     for (final m in rItems) {
@@ -227,7 +229,8 @@ class SyncFileService extends ChangeNotifier {
         // Last-write-wins by updated timestamp if present; else prefer local.
         final a = byId[id]!;
         final ru = (a['updatedAt'] as int?) ?? 0;
-        final lu = (m['updatedAt'] as int?) ?? (DateTime.now().millisecondsSinceEpoch);
+        final lu =
+            (m['updatedAt'] as int?) ?? (DateTime.now().millisecondsSinceEpoch);
         byId[id] = lu >= ru ? m : a;
       }
     }
@@ -240,7 +243,8 @@ class SyncFileService extends ChangeNotifier {
     };
   }
 
-  bool _deepEquals(Object? a, Object? b) => const DeepCollectionEquality().equals(a, b);
+  bool _deepEquals(Object? a, Object? b) =>
+      const DeepCollectionEquality().equals(a, b);
 
   // --- Auth helpers ---
   Future<void> _maybeRefreshToken() async {
@@ -254,11 +258,27 @@ class SyncFileService extends ChangeNotifier {
         );
     if (!needs) return;
     final clientId = ep.googleClientId;
-    final scopes = ep.googleScopes ?? const ['https://www.googleapis.com/auth/drive.appdata'];
+    final scopes = ep.googleScopes ??
+        const ['https://www.googleapis.com/auth/drive.appdata'];
     if (clientId == null || clientId.isEmpty) return;
-    final sess = await googleSignInPkce(
+    // On mobile (io), prefer refresh token if we have one; on web, fall back to silent re-auth.
+    GoogleSession? sess;
+    if (ep.googleRefreshToken != null && ep.googleRefreshToken!.isNotEmpty) {
+      // Attempt refresh
+      try {
+        sess = await googleRefresh(
+          clientId: clientId,
+          redirectUri: Uri.parse('com.example.app:/oauthredirect'),
+          scopes: scopes,
+          refreshToken: ep.googleRefreshToken!,
+        );
+      } catch (_) {
+        sess = null;
+      }
+    }
+    sess ??= await googleSignInPkce(
       clientId: clientId,
-      redirectUri: Uri(),
+      redirectUri: Uri.parse('com.example.app:/oauthredirect'),
       scopes: scopes,
       silent: true,
     );
@@ -271,6 +291,9 @@ class SyncFileService extends ChangeNotifier {
       fileId: ep.googleFileId,
       clientId: clientId,
       scopes: scopes,
+      refreshToken: sess.refreshToken.isNotEmpty
+          ? sess.refreshToken
+          : ep.googleRefreshToken,
     );
     await setEndpoint(newEp);
   }
@@ -366,6 +389,7 @@ class SyncEndpoint {
   final String? googleFileId; // resolved appDataFolder file id
   final String? googleClientId;
   final List<String>? googleScopes;
+  final String? googleRefreshToken;
 
   const SyncEndpoint.webdav({
     required this.url,
@@ -374,36 +398,40 @@ class SyncEndpoint {
   })  : backend = SyncBackend.webdav,
         googleAccessToken = null,
         googleExpiresAtMs = null,
-  googleFileId = null,
-  googleClientId = null,
-  googleScopes = null;
+        googleFileId = null,
+        googleClientId = null,
+        googleScopes = null,
+        googleRefreshToken = null;
 
   SyncEndpoint.googleDrive({
     required String accessToken,
     required DateTime expiresAt,
     String? fileId,
-  String? clientId,
-  List<String>? scopes,
+    String? clientId,
+    List<String>? scopes,
+    String? refreshToken,
   })  : backend = SyncBackend.googleDrive,
         url = '',
         username = null,
         password = null,
         googleAccessToken = accessToken,
         googleExpiresAtMs = expiresAt.millisecondsSinceEpoch,
-    googleFileId = fileId,
-    googleClientId = clientId,
-    googleScopes = scopes;
+        googleFileId = fileId,
+        googleClientId = clientId,
+        googleScopes = scopes,
+        googleRefreshToken = refreshToken;
 
   Map<String, dynamic> toJson() => {
         'backend': backend.name,
         'url': url,
         'username': username,
         'password': password,
-  'googleAccessToken': googleAccessToken,
-  'googleExpiresAtMs': googleExpiresAtMs,
-  'googleFileId': googleFileId,
-  'googleClientId': googleClientId,
-  'googleScopes': googleScopes,
+        'googleAccessToken': googleAccessToken,
+        'googleExpiresAtMs': googleExpiresAtMs,
+        'googleFileId': googleFileId,
+        'googleClientId': googleClientId,
+        'googleScopes': googleScopes,
+        'googleRefreshToken': googleRefreshToken,
       };
 
   factory SyncEndpoint.fromJson(Map<String, dynamic> m) {
@@ -417,6 +445,7 @@ class SyncEndpoint {
           fileId: m['googleFileId'] as String?,
           clientId: m['googleClientId'] as String?,
           scopes: (m['googleScopes'] as List?)?.cast<String>(),
+          refreshToken: m['googleRefreshToken'] as String?,
         );
       case 'webdav':
         return SyncEndpoint.webdav(
@@ -441,7 +470,7 @@ extension on SyncFileService {
   Future<Map<String, dynamic>?> _readRemote() async {
     final ep = _endpoint!;
     if (ep.backend == SyncBackend.googleDrive) {
-  await _maybeRefreshToken();
+      await _maybeRefreshToken();
       return _gdRead(ep);
     }
     if (ep.backend != SyncBackend.webdav) return null;
@@ -453,7 +482,8 @@ extension on SyncFileService {
     final res = await http.get(Uri.parse(ep.url), headers: headers);
     if (res.statusCode == 404) return null; // treat as empty
     if (res.statusCode >= 400) {
-      throw Exception('WebDAV read failed: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
+      throw Exception(
+          'WebDAV read failed: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
     }
     _etag = res.headers['etag'];
     final body = utf8.decode(res.bodyBytes);
@@ -463,7 +493,7 @@ extension on SyncFileService {
   Future<void> _writeRemote(Map<String, dynamic> doc) async {
     final ep = _endpoint!;
     if (ep.backend == SyncBackend.googleDrive) {
-  await _maybeRefreshToken();
+      await _maybeRefreshToken();
       await _gdWrite(ep, doc);
       return;
     }
@@ -474,9 +504,11 @@ extension on SyncFileService {
       final cred = base64Encode(utf8.encode('${ep.username}:${ep.password}'));
       headers['authorization'] = 'Basic $cred';
     }
-    final res = await http.put(Uri.parse(ep.url), headers: headers, body: jsonEncode(doc));
+    final res = await http.put(Uri.parse(ep.url),
+        headers: headers, body: jsonEncode(doc));
     if (res.statusCode >= 400) {
-      throw Exception('WebDAV write failed: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
+      throw Exception(
+          'WebDAV write failed: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
     }
     _etag = res.headers['etag'] ?? _etag;
   }
@@ -487,7 +519,8 @@ extension _GoogleDrive on SyncFileService {
   bool _gdExpired(SyncEndpoint ep) {
     final ms = ep.googleExpiresAtMs ?? 0;
     if (ms == 0) return true;
-    return DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(ms - 30 * 1000));
+    return DateTime.now()
+        .isAfter(DateTime.fromMillisecondsSinceEpoch(ms - 30 * 1000));
   }
 
   Future<String> _gdEnsureFileId(SyncEndpoint ep) async {
@@ -495,26 +528,31 @@ extension _GoogleDrive on SyncFileService {
     if (_gdExpired(ep)) throw Exception('Google token expired');
     final token = ep.googleAccessToken!;
     // List existing in appDataFolder by name
-    final listUri = Uri.parse('https://www.googleapis.com/drive/v3/files').replace(queryParameters: {
+    final listUri = Uri.parse('https://www.googleapis.com/drive/v3/files')
+        .replace(queryParameters: {
       'spaces': 'appDataFolder',
       'q': "name = 'tv_tracker_sync.json'",
       'fields': 'files(id,name)',
       'pageSize': '1',
     });
-    final lr = await http.get(listUri, headers: {'authorization': 'Bearer $token'});
+    final lr =
+        await http.get(listUri, headers: {'authorization': 'Bearer $token'});
     if (lr.statusCode == 401) throw Exception('Drive unauthorized (401)');
     if (lr.statusCode >= 400) {
-      throw Exception('Drive list failed: ${lr.statusCode} ${utf8.decode(lr.bodyBytes)}');
+      throw Exception(
+          'Drive list failed: ${lr.statusCode} ${utf8.decode(lr.bodyBytes)}');
     }
     final body = jsonDecode(utf8.decode(lr.bodyBytes)) as Map<String, dynamic>;
-    final files = (body['files'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final files =
+        (body['files'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
     String fileId;
     if (files.isNotEmpty) {
       fileId = (files.first['id'] as String?) ?? '';
     } else {
       // Create metadata in appDataFolder
       final mr = await http.post(
-        Uri.parse('https://www.googleapis.com/drive/v3/files').replace(queryParameters: {'fields': 'id'}),
+        Uri.parse('https://www.googleapis.com/drive/v3/files')
+            .replace(queryParameters: {'fields': 'id'}),
         headers: {
           'authorization': 'Bearer $token',
           'content-type': 'application/json',
@@ -525,7 +563,8 @@ extension _GoogleDrive on SyncFileService {
         }),
       );
       if (mr.statusCode >= 400) {
-        throw Exception('Drive create failed: ${mr.statusCode} ${utf8.decode(mr.bodyBytes)}');
+        throw Exception(
+            'Drive create failed: ${mr.statusCode} ${utf8.decode(mr.bodyBytes)}');
       }
       fileId = ((jsonDecode(mr.body) as Map)['id'] as String?) ?? '';
       // Initialize content
@@ -538,6 +577,7 @@ extension _GoogleDrive on SyncFileService {
       fileId: fileId,
       clientId: ep.googleClientId,
       scopes: ep.googleScopes,
+      refreshToken: ep.googleRefreshToken,
     );
     await setEndpoint(newEp);
     return fileId;
@@ -547,11 +587,13 @@ extension _GoogleDrive on SyncFileService {
     if (_gdExpired(ep)) throw Exception('Google token expired');
     final token = ep.googleAccessToken!;
     final fileId = await _gdEnsureFileId(ep);
-    final uri = Uri.parse('https://www.googleapis.com/drive/v3/files/$fileId').replace(queryParameters: {'alt': 'media'});
+    final uri = Uri.parse('https://www.googleapis.com/drive/v3/files/$fileId')
+        .replace(queryParameters: {'alt': 'media'});
     final r = await http.get(uri, headers: {'authorization': 'Bearer $token'});
     if (r.statusCode == 404) return null;
     if (r.statusCode >= 400) {
-      throw Exception('Drive read failed: ${r.statusCode} ${utf8.decode(r.bodyBytes)}');
+      throw Exception(
+          'Drive read failed: ${r.statusCode} ${utf8.decode(r.bodyBytes)}');
     }
     return jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
   }
@@ -563,8 +605,11 @@ extension _GoogleDrive on SyncFileService {
     await _gdUpload(fileId, token, doc);
   }
 
-  Future<void> _gdUpload(String fileId, String token, Map<String, dynamic> doc) async {
-    final uri = Uri.parse('https://www.googleapis.com/upload/drive/v3/files/$fileId').replace(queryParameters: {
+  Future<void> _gdUpload(
+      String fileId, String token, Map<String, dynamic> doc) async {
+    final uri =
+        Uri.parse('https://www.googleapis.com/upload/drive/v3/files/$fileId')
+            .replace(queryParameters: {
       'uploadType': 'media',
     });
     final r = await http.patch(uri,
@@ -574,7 +619,8 @@ extension _GoogleDrive on SyncFileService {
         },
         body: jsonEncode(doc));
     if (r.statusCode >= 400) {
-      throw Exception('Drive upload failed: ${r.statusCode} ${utf8.decode(r.bodyBytes)}');
+      throw Exception(
+          'Drive upload failed: ${r.statusCode} ${utf8.decode(r.bodyBytes)}');
     }
   }
 }
@@ -609,7 +655,8 @@ class DeepCollectionEquality {
 
 // Inherited notifier to access the sync service easily.
 class SyncScope extends InheritedNotifier<SyncFileService> {
-  const SyncScope({super.key, required SyncFileService sync, required super.child})
+  const SyncScope(
+      {super.key, required SyncFileService sync, required super.child})
       : super(notifier: sync);
 
   static SyncFileService of(BuildContext context) =>

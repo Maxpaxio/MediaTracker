@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
 import '../services/show_search_controller.dart';
+import '../services/multi_search_controller.dart'; // NEW: to integrate multi search
+import 'subpages/more_info_page.dart'; // for PersonCreditsPage
 import '../services/tmdb_api.dart'; // NEW: to fetch provider logos
+import '../services/region.dart';
+import '../services/settings_controller.dart';
 import '../services/sync_file_service.dart';
 import 'sync_connect_page.dart';
 import '../widgets/section_title.dart';
@@ -21,20 +25,25 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late final ShowsSearchController search;
+  late final ShowsSearchController
+      search; // legacy (kept for any TV-only logic if needed)
+  late final MultiSearchController multiSearch;
   final _searchFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
     search = ShowsSearchController()..addListener(_onSearchNotify);
+    multiSearch = MultiSearchController()..addListener(_onSearchNotify);
   }
 
   @override
   void dispose() {
     search.removeListener(_onSearchNotify);
     search.dispose();
-  _searchFocus.dispose();
+    multiSearch.removeListener(_onSearchNotify);
+    multiSearch.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -65,32 +74,32 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final storage = StorageScope.of(context);
-  // Show newest-added first by reversing the lists at display time
-  final ongoing = storage.ongoing
-    .where((s) => s.mediaType == MediaType.tv)
-    .toList()
-    .reversed
-    .toList();
-  final completed = storage.completed
-    .where((s) => s.mediaType == MediaType.tv)
-    .toList()
-    .reversed
-    .toList();
-  final watchlist = storage.watchlist
-    .where((s) => s.mediaType == MediaType.tv)
-    .toList()
-    .reversed
-    .toList();
+    // Show newest-added first by reversing the lists at display time
+    final ongoing = storage.ongoing
+        .where((s) => s.mediaType == MediaType.tv)
+        .toList()
+        .reversed
+        .toList();
+    final completed = storage.completed
+        .where((s) => s.mediaType == MediaType.tv)
+        .toList()
+        .reversed
+        .toList();
+    final watchlist = storage.watchlist
+        .where((s) => s.mediaType == MediaType.tv)
+        .toList()
+        .reversed
+        .toList();
 
-    final hasQuery = search.text.text.isNotEmpty;
+    final hasQuery = multiSearch.text.text.isNotEmpty;
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: !hasQuery,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
         if (hasQuery) {
           search.clear();
-          return false;
         }
-        return true;
       },
       child: Scaffold(
         appBar: AppBar(
@@ -138,7 +147,9 @@ class _HomePageState extends State<HomePage> {
               padding: EdgeInsets.zero,
               children: [
                 const DrawerHeader(
-                  child: Text('MediaTracker', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  child: Text('MediaTracker',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ),
                 ListTile(
                   leading: const Icon(Icons.search),
@@ -159,7 +170,8 @@ class _HomePageState extends State<HomePage> {
                 ListTile(
                   leading: const Icon(Icons.cloud),
                   title: const Text('Cloud storage'),
-                  onTap: () => Navigator.pushNamed(context, SyncConnectPage.route),
+                  onTap: () =>
+                      Navigator.pushNamed(context, SyncConnectPage.route),
                 ),
               ],
             ),
@@ -173,9 +185,9 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: TextField(
                   focusNode: _searchFocus,
-                  controller: search.text,
-                  onChanged: search.onChanged,
-                  onSubmitted: search.onChanged,
+                  controller: multiSearch.text,
+                  onChanged: multiSearch.onChanged,
+                  onSubmitted: multiSearch.onChanged,
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     hintText: 'Search TV shows…',
@@ -198,7 +210,7 @@ class _HomePageState extends State<HomePage> {
             // Searching indicator
             if (hasQuery)
               SliverToBoxAdapter(
-                child: search.searching
+                child: multiSearch.searching
                     ? const Padding(
                         padding: EdgeInsets.only(top: 24),
                         child: Center(child: CircularProgressIndicator()),
@@ -207,17 +219,24 @@ class _HomePageState extends State<HomePage> {
               ),
 
             // Results directly under the search bar
-            if (hasQuery && !search.searching)
+            if (hasQuery && !multiSearch.searching)
               SliverList.separated(
-                itemCount: search.results.length,
+                itemCount: multiSearch.results.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (_, i) {
-                  final s = search.results[i];
-                  return _SearchRow(
-                    show: s,
-                    search: search,
-                    onOpen: () => _openShow(s),
-                  );
+                  final item = multiSearch.results[i];
+                  switch (item.kind) {
+                    case MultiKind.tv:
+                    case MultiKind.movie:
+                      final show = item.show!;
+                      return _SearchRow(
+                        show: show,
+                        search: ShowsSearchControllerAdapter(multiSearch),
+                        onOpen: () => _openShow(show),
+                      );
+                    case MultiKind.person:
+                      return _PersonSearchRow(item: item);
+                  }
                 },
               ),
 
@@ -452,7 +471,8 @@ class _OngoingCardState extends State<_OngoingCard> {
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeOut,
                           tween: Tween<double>(end: show.progress),
-                          builder: (context, value, _) => LinearProgressIndicator(value: value),
+                          builder: (context, value, _) =>
+                              LinearProgressIndicator(value: value),
                         ),
                       ),
                     ),
@@ -489,6 +509,7 @@ class _ProviderLogosGridState extends State<_ProviderLogosGrid> {
 
   List<Map<String, dynamic>> _logos = const [];
   bool _loading = true;
+  String? _regionUsed;
 
   @override
   void initState() {
@@ -496,9 +517,23 @@ class _ProviderLogosGridState extends State<_ProviderLogosGrid> {
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final settings = SettingsScope.of(context);
+    final region = settings.effectiveRegion ?? detectRegionCode(fallback: 'US');
+    if (_regionUsed != null && _regionUsed != region) {
+      _load(forceRegion: region);
+    }
+  }
+
+  Future<void> _load({String? forceRegion}) async {
     try {
-      final res = await _api.fetchWatchProviders(widget.showId, region: 'SE');
+      final settings = SettingsScope.of(context);
+      final region = forceRegion ??
+          settings.effectiveRegion ??
+          detectRegionCode(fallback: 'US');
+      final res = await _api.fetchWatchProviders(widget.showId, region: region);
       final combined = <Map<String, dynamic>>[
         ...res.streaming,
         ...res.rentBuy,
@@ -506,6 +541,7 @@ class _ProviderLogosGridState extends State<_ProviderLogosGrid> {
       setState(() {
         _logos = combined.take(8).toList();
         _loading = false;
+        _regionUsed = region;
       });
     } catch (_) {
       if (!mounted) return;
@@ -538,8 +574,8 @@ class _ProviderLogosGridState extends State<_ProviderLogosGrid> {
         borderRadius: BorderRadius.circular(6),
         child: Image.network(
           '$_imgBase/w92$logoPath',
-      // Let the image fill the grid cell and scale as needed
-      fit: BoxFit.contain,
+          // Let the image fill the grid cell and scale as needed
+          fit: BoxFit.contain,
           errorBuilder: (_, __, ___) => _placeholder(),
         ),
       );
@@ -559,9 +595,9 @@ class _ProviderLogosGridState extends State<_ProviderLogosGrid> {
         padding: EdgeInsets.zero,
         itemCount: badges.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: cols,
-      mainAxisSpacing: gap,
-      crossAxisSpacing: gap,
+          crossAxisCount: cols,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
           childAspectRatio: 1,
         ),
         itemBuilder: (_, i) => badges[i],
@@ -574,11 +610,11 @@ class _SearchRow extends StatelessWidget {
   const _SearchRow({
     required this.show,
     required this.onOpen,
-    required this.search,
+    required this.search, // Updated to use the adapter
   });
   final Show show;
   final VoidCallback onOpen;
-  final ShowsSearchController search;
+  final ShowsSearchControllerAdapter search;
 
   @override
   Widget build(BuildContext context) {
@@ -632,6 +668,52 @@ class _SearchRow extends StatelessWidget {
           storage.removeFromCompleted(show.id);
         },
       ),
+    );
+  }
+}
+
+// Adapter to reuse existing show detail ensuring logic with MultiSearchController
+class ShowsSearchControllerAdapter {
+  final MultiSearchController controller;
+  ShowsSearchControllerAdapter(this.controller);
+  Future<int> ensureDetailInStorage(AppStorage storage, Show s) async {
+    if (storage.exists(s.id)) return s.id;
+    storage.ensureShow(s);
+    return s.id;
+  }
+}
+
+class _PersonSearchRow extends StatelessWidget {
+  const _PersonSearchRow({required this.item});
+  final MultiSearchItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = item.personProfileUrl;
+    final knownFor = (item.knownForTitles ?? const []).take(3).join(', ');
+    return ListTile(
+      onTap: () => Navigator.pushNamed(
+        context,
+        PersonCreditsPage.route,
+        arguments: item.personId,
+      ),
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: profile != null && profile.isNotEmpty
+              ? Image.network(profile, fit: BoxFit.cover)
+              : Container(
+                  color: const Color(0xFF2C2C32),
+                  child: const Icon(Icons.person),
+                ),
+        ),
+      ),
+      title: Text(item.personName ?? 'Person'),
+      subtitle: knownFor.isNotEmpty
+          ? Text(knownFor, maxLines: 1, overflow: TextOverflow.ellipsis)
+          : const Text('Tap to view credits'),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
     );
   }
 }

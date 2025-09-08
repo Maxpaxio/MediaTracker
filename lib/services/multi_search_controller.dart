@@ -160,7 +160,7 @@ class MultiSearchController extends ChangeNotifier {
           final profilePath = (m['profile_path'] as String?) ?? '';
           final knownFor = (m['known_for'] as List? ?? const [])
               .cast<Map?>()
-              .map((e) => (e ?? const {}) as Map)
+              .map((e) => (e ?? const {}))
               .map((mm) => (mm['title'] ?? mm['name'] ?? '').toString())
               .where((t) => t.trim().isNotEmpty)
               .cast<String>()

@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_web_libraries_in_flutter
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:async';
 import 'dart:html' as html;
 import 'dart:js_util' as js_util;
@@ -20,7 +20,9 @@ Future<GoogleSession?> googleSignInPkce({
   // Load Google Identity Services script
   const src = 'https://accounts.google.com/gsi/client';
   if (html.document.querySelector('script[src="$src"]') == null) {
-    final s = html.ScriptElement()..src = src..async = true;
+    final s = html.ScriptElement()
+      ..src = src
+      ..async = true;
     final c = Completer<void>();
     s.onLoad.first.then((_) => c.complete());
     html.document.head!.append(s);
@@ -47,9 +49,11 @@ Future<GoogleSession?> googleSignInPkce({
       return;
     }
     final token = js_util.getProperty(resp, 'access_token') as String?;
-    final expiresIn = (js_util.getProperty(resp, 'expires_in') as num?)?.toInt() ?? 0;
+    final expiresIn =
+        (js_util.getProperty(resp, 'expires_in') as num?)?.toInt() ?? 0;
     if (token != null && token.isNotEmpty) {
-      completer.complete(GoogleSession(token, DateTime.now().add(Duration(seconds: expiresIn)), ''));
+      completer.complete(GoogleSession(
+          token, DateTime.now().add(Duration(seconds: expiresIn)), ''));
     } else {
       completer.complete(null);
     }
@@ -64,5 +68,15 @@ Future<GoogleSession?> googleSignInPkce({
   final tokenClient = js_util.callMethod(oauth2, 'initTokenClient', [config]);
   js_util.callMethod(tokenClient, 'requestAccessToken', []);
 
-  return completer.future.timeout(const Duration(minutes: 3), onTimeout: () => null);
+  return completer.future
+      .timeout(const Duration(minutes: 3), onTimeout: () => null);
 }
+
+// Web GIS token client does not issue refresh tokens; return null so caller re-auths silently.
+Future<GoogleSession?> googleRefresh({
+  required String clientId,
+  required Uri redirectUri, // unused
+  required List<String> scopes,
+  required String refreshToken,
+}) async =>
+    null;

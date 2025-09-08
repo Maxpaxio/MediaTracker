@@ -39,8 +39,10 @@
 </head>
 <body>
   <script>
-  // Force the HTML renderer for broad compatibility while previewing
-  window.flutterConfiguration = { renderer: "html" };
+    // Ensure no legacy Flutter Web config remains to avoid conflicts with engineInitializer.
+    try { delete window.flutterConfiguration; } catch (_) { window.flutterConfiguration = undefined; }
+  </script>
+  <script>
   // Kick a resize after first load to avoid iOS Safari initial layout quirk
   window.addEventListener('load', function() {
     setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 60);
