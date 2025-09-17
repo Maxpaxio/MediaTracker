@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'storage.dart';
+import 'tmdb_api.dart';
 
 class MoviesSearchController extends ChangeNotifier {
   MoviesSearchController();
@@ -114,7 +115,15 @@ class MoviesSearchController extends ChangeNotifier {
 
   Future<int> ensureDetailInStorage(AppStorage storage, Show lite) async {
     if (storage.exists(lite.id)) return lite.id;
-    storage.ensureShow(lite);
-    return lite.id;
+    try {
+      // Fetch full movie detail for richer metadata; seasons remain empty by design
+      final api = TmdbApi();
+      final full = await api.fetchMovieDetailStorage(lite.id);
+      storage.ensureShow(full);
+      return lite.id;
+    } catch (_) {
+      storage.ensureShow(lite);
+      return lite.id;
+    }
   }
 }

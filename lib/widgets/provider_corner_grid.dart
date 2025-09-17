@@ -22,6 +22,13 @@ class ProviderCornerGrid extends StatefulWidget {
 class _ProviderCornerGridState extends State<ProviderCornerGrid> {
   static const _imgBase = 'https://image.tmdb.org/t/p';
   final _api = TmdbApi();
+  // Simple in-memory per-run cache so we don't refetch every rebuild and to avoid
+  // transient network blanks causing an empty UI. Key format: "movie:123" / "tv:456".
+  static final Map<String, ({
+    List<Map<String, dynamic>> streaming,
+    List<Map<String, dynamic>> rentBuy,
+    String region
+  })> _cache = {};
 
   // Streaming providers limited for display on poster (max 3)
   List<Map<String, dynamic>> _streaming = const [];
@@ -29,9 +36,11 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
   List<Map<String, dynamic>> _allStreaming = const [];
   List<Map<String, dynamic>> _rentBuy = const [];
   bool _loading = true;
-  bool _hasMoreStreaming = false;
-  bool _hasRentBuy = false;
+  bool _showEllipsis = false; // whether to render the … badge
+  bool _hasRentBuy = false; // for bottom sheet section visibility
   String? _regionUsed;
+  bool _error = false; // after retries
+  int _attempts = 0;
 
   @override
   void initState() {
@@ -59,8 +68,8 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
         _streaming = const [];
         _allStreaming = const [];
         _rentBuy = const [];
-        _hasMoreStreaming = false;
-        _hasRentBuy = false;
+  _showEllipsis = false;
+  _hasRentBuy = false;
       });
       _load();
     }
@@ -68,31 +77,67 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
 
   Future<void> _load({String? forceRegion}) async {
     try {
+      final key = '${widget.mediaType.name}:${widget.showId}';
+      // If we have cached data and this is the first attempt, show it immediately while refreshing.
+      if (_attempts == 0 && _cache.containsKey(key)) {
+        final cached = _cache[key]!;
+        _applyData(
+          streaming: cached.streaming,
+          rentBuy: cached.rentBuy,
+          usedRegion: cached.region,
+          fromCache: true,
+        );
+        // Continue to refresh in background (don't return).
+      }
       final settings = SettingsScope.of(context);
       final region = forceRegion ??
           settings.effectiveRegion ??
           detectRegionCode(fallback: 'US');
-      final res = widget.mediaType == MediaType.movie
-          ? await _api.fetchMovieWatchProviders(widget.showId, region: region)
-          : await _api.fetchWatchProviders(widget.showId, region: region);
-      final streaming = (res.streaming).cast<Map<String, dynamic>>();
-      final rentBuy = (res.rentBuy).cast<Map<String, dynamic>>();
+      // First try the selected/detected region
+      var usedRegion = region.toUpperCase();
+      var res = widget.mediaType == MediaType.movie
+          ? await _api.fetchMovieWatchProviders(widget.showId, region: usedRegion)
+          : await _api.fetchWatchProviders(widget.showId, region: usedRegion);
+      var streaming = (res.streaming).cast<Map<String, dynamic>>();
+      var rentBuy = (res.rentBuy).cast<Map<String, dynamic>>();
       if (!mounted) return;
-      setState(() {
-        _allStreaming = streaming;
-        _rentBuy = rentBuy;
-        _hasRentBuy = _rentBuy.isNotEmpty;
-        _hasMoreStreaming = _allStreaming.length > 3;
-        _streaming = _allStreaming
-            .take(3)
-            .toList(growable: false); // max 3 streaming logos
-        _loading = false;
-        _regionUsed = region;
-      });
+      _applyData(streaming: streaming, rentBuy: rentBuy, usedRegion: usedRegion);
+      // Cache successful result
+      _cache[key] = (streaming: _allStreaming, rentBuy: _rentBuy, region: _regionUsed ?? usedRegion);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      // Retry up to 2 times before marking error.
+      if (_attempts < 2) {
+        _attempts += 1;
+        Future<void>.delayed(const Duration(milliseconds: 650), () => _load(forceRegion: forceRegion));
+      } else {
+        setState(() {
+          _loading = false;
+          _error = true;
+        });
+      }
     }
+  }
+
+  void _applyData({
+    required List<Map<String, dynamic>> streaming,
+    required List<Map<String, dynamic>> rentBuy,
+    required String usedRegion,
+    bool fromCache = false,
+  }) {
+    setState(() {
+      _allStreaming = streaming;
+      _rentBuy = rentBuy;
+      _hasRentBuy = _rentBuy.isNotEmpty;
+      final displayingStreaming = _allStreaming.isNotEmpty || !_hasRentBuy;
+      final displayedList = displayingStreaming ? _allStreaming : _rentBuy;
+      _streaming = displayedList.take(3).toList(growable: false);
+      final otherExists = displayingStreaming ? _hasRentBuy : _allStreaming.isNotEmpty;
+      _showEllipsis = displayedList.length > 3 || otherExists;
+      _loading = false;
+      _regionUsed = usedRegion;
+      _error = false;
+    });
   }
 
   void _openProvidersSheet() {
@@ -277,8 +322,31 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const SizedBox.shrink();
-    final showEllipsis = _hasMoreStreaming || _hasRentBuy;
-    if (_streaming.isEmpty && !showEllipsis) return const SizedBox.shrink();
+    if (_error) {
+      // Minimal unobtrusive retry affordance
+      return GestureDetector(
+        onTap: () {
+          setState(() {
+            _loading = true;
+            _error = false;
+            _attempts = 0;
+          });
+            _load();
+        },
+        child: Container(
+          width: widget.size + 6,
+          height: widget.size + 6,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.refresh, size: 18, color: Colors.white54),
+        ),
+      );
+    }
+  final showEllipsis = _showEllipsis;
+  if (_streaming.isEmpty && !showEllipsis) return const SizedBox.shrink();
 
     final size = widget.size;
     const gap = 4.0;
@@ -310,23 +378,26 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
       );
     }).toList();
 
-    // Ellipsis badge if there are more streaming providers or any rent/buy options
+  // Ellipsis badge if more logos exist or another category is available
     if (showEllipsis) {
       badges.add(GestureDetector(
         onTap: _openProvidersSheet,
         child: Semantics(
           label: 'More providers',
           button: true,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: const Color(0xCC2F2F35),
-              borderRadius: BorderRadius.circular(size * 0.18),
+          child: Tooltip(
+            message: 'More providers (Region: ${_regionUsed ?? '—'})',
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                color: const Color(0xCC2F2F35),
+                borderRadius: BorderRadius.circular(size * 0.18),
+              ),
+              alignment: Alignment.center,
+              child: Text('…',
+                  style: TextStyle(fontSize: size * 0.9, height: 1.0)),
             ),
-            alignment: Alignment.center,
-            child:
-                Text('…', style: TextStyle(fontSize: size * 0.9, height: 1.0)),
           ),
         ),
       ));

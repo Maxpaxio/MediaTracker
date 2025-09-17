@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/settings_controller.dart';
 import '../services/region.dart';
+import '../widgets/tmdb_attribution.dart';
 
 class SettingsPage extends StatefulWidget {
   static const route = '/settings';
@@ -111,6 +112,13 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
         ],
+      ),
+      bottomNavigationBar: const SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: TmdbAttribution(center: true, textAbove: true, height: 48),
+        ),
       ),
     );
   }

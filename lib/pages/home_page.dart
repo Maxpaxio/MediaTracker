@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import '../services/storage.dart';
 import '../services/show_search_controller.dart';
 import '../services/multi_search_controller.dart'; // NEW: to integrate multi search
-import 'subpages/more_info_page.dart'; // for PersonCreditsPage
-import '../services/tmdb_api.dart'; // NEW: to fetch provider logos
-import '../services/region.dart';
-import '../services/settings_controller.dart';
+// (region & settings imports removed after unifying provider logos overlay)
 import '../services/sync_file_service.dart';
 import 'sync_connect_page.dart';
 import '../widgets/section_title.dart';
 import '../widgets/watchlist_poster.dart';
 import '../widgets/completed_poster.dart';
+import '../widgets/provider_mini_grid.dart';
 import 'all_ongoing_page.dart';
 import 'all_completed_page.dart';
 import 'all_watchlist_page.dart';
@@ -98,7 +96,7 @@ class _HomePageState extends State<HomePage> {
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (hasQuery) {
-          search.clear();
+          multiSearch.clear();
         }
       },
       child: Scaffold(
@@ -173,6 +171,11 @@ class _HomePageState extends State<HomePage> {
                   onTap: () =>
                       Navigator.pushNamed(context, SyncConnectPage.route),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.settings),
+                  title: const Text('Settings'),
+                  onTap: () => Navigator.pushNamed(context, '/settings'),
+                ),
               ],
             ),
           ),
@@ -196,7 +199,7 @@ class _HomePageState extends State<HomePage> {
                         ? IconButton(
                             icon: const Icon(Icons.close),
                             onPressed: () {
-                              search.clear();
+                              multiSearch.clear();
                               _searchFocus.requestFocus();
                             },
                             tooltip: 'Clear',
@@ -221,10 +224,15 @@ class _HomePageState extends State<HomePage> {
             // Results directly under the search bar
             if (hasQuery && !multiSearch.searching)
               SliverList.separated(
-                itemCount: multiSearch.results.length,
+                itemCount: multiSearch.results
+                    .where((r) => r.kind != MultiKind.person)
+                    .length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (_, i) {
-                  final item = multiSearch.results[i];
+                  final list = multiSearch.results
+                      .where((r) => r.kind != MultiKind.person)
+                      .toList();
+                  final item = list[i];
                   switch (item.kind) {
                     case MultiKind.tv:
                     case MultiKind.movie:
@@ -235,7 +243,8 @@ class _HomePageState extends State<HomePage> {
                         onOpen: () => _openShow(show),
                       );
                     case MultiKind.person:
-                      return _PersonSearchRow(item: item);
+                      // Excluded on TV page
+                      return const SizedBox.shrink();
                   }
                 },
               ),
@@ -266,7 +275,7 @@ class _HomePageState extends State<HomePage> {
                           itemCount: ongoing.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(width: 12),
-                          itemBuilder: (_, i) => _OngoingCard(
+                          itemBuilder: (_, i) => _OngoingCardWide(
                             key: ValueKey('ongoing-${ongoing[i].id}'),
                             show: ongoing[i],
                           ),
@@ -350,141 +359,110 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           ],
         ),
+  // No TMDb footer here; attribution is shown on Home and Settings only.
+  bottomNavigationBar: null,
       ),
     );
   }
 }
 
-/// Ongoing card with provider logos and subtle hover/animation polish.
-class _OngoingCard extends StatefulWidget {
-  const _OngoingCard({super.key, required this.show});
+/// Wide ongoing card: poster left, title + provider right column, progress lines below.
+class _OngoingCardWide extends StatelessWidget {
+  const _OngoingCardWide({super.key, required this.show});
   final Show show;
 
   @override
-  State<_OngoingCard> createState() => _OngoingCardState();
-}
-
-class _OngoingCardState extends State<_OngoingCard> {
-  bool _hover = false;
-
-  @override
   Widget build(BuildContext context) {
-    final show = widget.show;
     final epSeen = show.watchedEpisodes;
     final epTotal = show.totalEpisodes;
     final pct = (show.progress * 100).round();
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOut,
-        scale: _hover ? 1.02 : 1.0,
-        child: SizedBox(
-          width: 210,
-          child: Card(
-            elevation: _hover ? 8 : 2,
-            margin: EdgeInsets.zero,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () {
-                Navigator.pushNamed(
-                  context,
-                  ShowDetailPage.route,
-                  arguments: ShowDetailArgs(showId: show.id),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
-                child: Column(
+    return SizedBox(
+      width: 210,
+      child: Card(
+        elevation: 2,
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.pushNamed(
+            context,
+            ShowDetailPage.route,
+            arguments: ShowDetailArgs(showId: show.id),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Top row: poster + right column (title + logos)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Poster
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            show.posterUrl,
-                            width: 90,
-                            height: 130,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: 90,
-                              height: 130,
-                              color: const Color(0xFF2C2C32),
-                              alignment: Alignment.center,
-                              child: const Icon(Icons.broken_image),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Right side: title + provider logos grid
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Title
-                              Text(
-                                show.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                  height: 1.1,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-
-                              // TMDb provider logos
-                              _ProviderLogosGrid(showId: show.id),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 6),
-
-                    // Ep seen line
-                    Text(
-                      '$epSeen/$epTotal Ep seen',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-
-                    // Progress bar (animated)
-                    const SizedBox(height: 4),
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: SizedBox(
-                        height: 6,
-                        child: TweenAnimationBuilder<double>(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                          tween: Tween<double>(end: show.progress),
-                          builder: (context, value, _) =>
-                              LinearProgressIndicator(value: value),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        show.posterUrl,
+                        width: 90,
+                        height: 130,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 90,
+                          height: 130,
+                          color: const Color(0xFF2C2C32),
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.broken_image),
                         ),
                       ),
                     ),
-
-                    // Percentage
-                    Text(
-                      'Progress: $pct%',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            show.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              height: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          ProviderMiniGrid(
+                            showId: show.id,
+                            mediaType: show.mediaType,
+                            size: 26,
+                            row: false,
+                            streamingOnly: false,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 6),
+                Text('$epSeen/$epTotal Ep seen', style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    height: 6,
+                    child: TweenAnimationBuilder<double>(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                      tween: Tween<double>(end: show.progress),
+                      builder: (context, value, _) => LinearProgressIndicator(value: value),
+                    ),
+                  ),
+                ),
+                Text('Progress: $pct%', style: Theme.of(context).textTheme.bodySmall),
+              ],
             ),
           ),
         ),
@@ -493,118 +471,7 @@ class _OngoingCardState extends State<_OngoingCard> {
   }
 }
 
-/// Compact grid that fetches watch providers from TMDb (same as details)
-/// and renders their logos (up to 8) under the title.
-class _ProviderLogosGrid extends StatefulWidget {
-  const _ProviderLogosGrid({required this.showId});
-  final int showId;
-
-  @override
-  State<_ProviderLogosGrid> createState() => _ProviderLogosGridState();
-}
-
-class _ProviderLogosGridState extends State<_ProviderLogosGrid> {
-  static const _imgBase = 'https://image.tmdb.org/t/p';
-  final _api = TmdbApi();
-
-  List<Map<String, dynamic>> _logos = const [];
-  bool _loading = true;
-  String? _regionUsed;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final settings = SettingsScope.of(context);
-    final region = settings.effectiveRegion ?? detectRegionCode(fallback: 'US');
-    if (_regionUsed != null && _regionUsed != region) {
-      _load(forceRegion: region);
-    }
-  }
-
-  Future<void> _load({String? forceRegion}) async {
-    try {
-      final settings = SettingsScope.of(context);
-      final region = forceRegion ??
-          settings.effectiveRegion ??
-          detectRegionCode(fallback: 'US');
-      final res = await _api.fetchWatchProviders(widget.showId, region: region);
-      final combined = <Map<String, dynamic>>[
-        ...res.streaming,
-        ...res.rentBuy,
-      ];
-      setState(() {
-        _logos = combined.take(8).toList();
-        _loading = false;
-        _regionUsed = region;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-  }
-
-  Widget _placeholder() => Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: const Color(0xFF2F2F35),
-          borderRadius: BorderRadius.circular(6),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const SizedBox(height: 60);
-    }
-    if (_logos.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final badges = _logos.map((m) {
-      final logoPath = (m['logo_path'] as String?) ?? '';
-      if (logoPath.isEmpty) return _placeholder();
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Image.network(
-          '$_imgBase/w92$logoPath',
-          // Let the image fill the grid cell and scale as needed
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => _placeholder(),
-        ),
-      );
-    }).toList();
-
-    // 3 across (slightly larger logos), up to 2 rows (6 items visible)
-    const cols = 3;
-    const size = 32.0; // desired visual size per cell
-    const gap = 6.0;
-    final rows = ((badges.length + cols - 1) ~/ cols).clamp(1, 2);
-    final gridHeight = rows * size + (rows - 1) * gap;
-
-    return SizedBox(
-      height: gridHeight,
-      child: GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
-        itemCount: badges.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: cols,
-          mainAxisSpacing: gap,
-          crossAxisSpacing: gap,
-          childAspectRatio: 1,
-        ),
-        itemBuilder: (_, i) => badges[i],
-      ),
-    );
-  }
-}
+// (right-side provider column removed in favor of 2x2 mini grid under title)
 
 class _SearchRow extends StatelessWidget {
   const _SearchRow({
@@ -623,8 +490,12 @@ class _SearchRow extends StatelessWidget {
     final existing = storage.tryGet(show.id);
     final inWatchlist = existing?.isWatchlist ?? false;
     final isCompleted = existing?.isCompleted ?? false;
+  final isOngoing = existing != null &&
+    !existing.isCompleted &&
+    !existing.isWatchlist &&
+    existing.watchedEpisodes > 0;
 
-    return ListTile(
+  return ListTile(
       onTap: onOpen,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       leading: ClipRRect(
@@ -650,6 +521,7 @@ class _SearchRow extends StatelessWidget {
       trailing: _PillActionsButton(
         inWatchlist: inWatchlist,
         isCompleted: isCompleted,
+        isOngoing: isOngoing,
         // Ensure detail before mutating, so we never insert an "empty seasons" show
         onAddWatchlist: () async {
           final id = await search.ensureDetailInStorage(storage, show);
@@ -677,52 +549,18 @@ class ShowsSearchControllerAdapter {
   final MultiSearchController controller;
   ShowsSearchControllerAdapter(this.controller);
   Future<int> ensureDetailInStorage(AppStorage storage, Show s) async {
-    if (storage.exists(s.id)) return s.id;
-    storage.ensureShow(s);
-    return s.id;
+  return controller.ensureDetailInStorage(storage, s);
   }
 }
 
-class _PersonSearchRow extends StatelessWidget {
-  const _PersonSearchRow({required this.item});
-  final MultiSearchItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = item.personProfileUrl;
-    final knownFor = (item.knownForTitles ?? const []).take(3).join(', ');
-    return ListTile(
-      onTap: () => Navigator.pushNamed(
-        context,
-        PersonCreditsPage.route,
-        arguments: item.personId,
-      ),
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: profile != null && profile.isNotEmpty
-              ? Image.network(profile, fit: BoxFit.cover)
-              : Container(
-                  color: const Color(0xFF2C2C32),
-                  child: const Icon(Icons.person),
-                ),
-        ),
-      ),
-      title: Text(item.personName ?? 'Person'),
-      subtitle: knownFor.isNotEmpty
-          ? Text(knownFor, maxLines: 1, overflow: TextOverflow.ellipsis)
-          : const Text('Tap to view credits'),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-    );
-  }
-}
+// Person search rows are only shown on the Home (Media) page, not on the TV page.
 
 /// Pill-shaped button that shows state and opens a bottom sheet with context-aware actions.
 class _PillActionsButton extends StatelessWidget {
   const _PillActionsButton({
     required this.inWatchlist,
     required this.isCompleted,
+    required this.isOngoing,
     required this.onAddWatchlist,
     required this.onRemoveWatchlist,
     required this.onAddCompleted,
@@ -731,6 +569,7 @@ class _PillActionsButton extends StatelessWidget {
 
   final bool inWatchlist;
   final bool isCompleted;
+  final bool isOngoing;
   final Future<void> Function() onAddWatchlist;
   final VoidCallback onRemoveWatchlist;
   final Future<void> Function() onAddCompleted;
@@ -758,6 +597,11 @@ class _PillActionsButton extends StatelessWidget {
       icon = Icons.bookmark;
       bg = yellow;
       fg = Colors.black;
+    } else if (isOngoing) {
+      label = 'Ongoing';
+      icon = Icons.play_circle_fill;
+      bg = theme.colorScheme.primary;
+      fg = theme.colorScheme.onPrimary;
     } else {
       label = 'Not added';
       icon = Icons.add;
@@ -848,3 +692,5 @@ class _PillActionsButton extends StatelessWidget {
     );
   }
 }
+
+// (Ongoing badge replaced by using the unified pill with an "Ongoing" variant.)

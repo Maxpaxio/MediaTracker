@@ -120,6 +120,11 @@ class _FilmsPageState extends State<FilmsPage> {
                 title: const Text('Cloud storage'),
                 onTap: () => Navigator.pushNamed(context, SyncConnectPage.route),
               ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Settings'),
+                onTap: () => Navigator.pushNamed(context, '/settings'),
+              ),
             ],
           ),
         ),
@@ -300,11 +305,12 @@ class _FilmsPageState extends State<FilmsPage> {
                       ),
               ),
             ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ],
       ),
+  // No TMDb footer here; attribution is shown on Home and Settings only.
+  bottomNavigationBar: null,
     );
   }
 }

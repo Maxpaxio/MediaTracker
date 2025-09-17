@@ -63,7 +63,8 @@ class RegionPickerButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceVariant.withValues(alpha: 0.4),
+          color:
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(24),
         ),
         child: Row(

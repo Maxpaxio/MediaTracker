@@ -7,6 +7,7 @@ import 'films_page.dart';
 import 'show_detail_page.dart';
 import 'sync_connect_page.dart';
 import 'subpages/more_info_page.dart'; // for PersonCreditsPage
+import '../widgets/tmdb_attribution.dart';
 
 class MediaHomePage extends StatefulWidget {
   static const route = '/';
@@ -137,10 +138,13 @@ class _MediaHomePageState extends State<MediaHomePage> {
           ),
         ),
       ),
-      body: Center(
+  body: Align(
+        alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
           child: ListView(
+            shrinkWrap: true,
+            primary: false,
             padding: const EdgeInsets.all(16),
             children: [
               const SizedBox(height: 8),
@@ -196,8 +200,16 @@ class _MediaHomePageState extends State<MediaHomePage> {
                         ))
                       : _MultiSearchResults(search: search, onOpen: _openShow),
                 ),
+              if (!hasQuery) const SizedBox(height: 24),
             ],
           ),
+        ),
+      ),
+    bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: const TmdbAttribution(center: true, textAbove: true, height: 72),
         ),
       ),
     );
@@ -226,6 +238,10 @@ class _MultiSearchResults extends StatelessWidget {
             final existing = storage.tryGet(s.id);
             final inWatchlist = existing?.isWatchlist ?? false;
             final isCompleted = existing?.isCompleted ?? false;
+      final isOngoing = existing != null &&
+        !existing.isCompleted &&
+        !existing.isWatchlist &&
+        existing.watchedEpisodes > 0;
             final subtitle = s.firstAirDate.isNotEmpty
                 ? (s.mediaType == MediaType.movie
                     ? 'Released: ${s.firstAirDate}'
@@ -269,26 +285,27 @@ class _MultiSearchResults extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: _AddToPill(
-                inWatchlist: inWatchlist,
-                isCompleted: isCompleted,
-                onAddWatchlist: () async {
-                  final id = await search.ensureDetailInStorage(storage, s);
-                  storage.toggleWatchlist(storage.byId(id));
-                },
-                onRemoveWatchlist: () {
-                  if (!storage.exists(s.id)) return;
-                  storage.removeFromWatchlist(s.id);
-                },
-                onAddCompleted: () async {
-                  final id = await search.ensureDetailInStorage(storage, s);
-                  storage.markCompleted(storage.byId(id));
-                },
-                onRemoveCompleted: () {
-                  if (!storage.exists(s.id)) return;
-                  storage.removeFromCompleted(s.id);
-                },
-              ),
+      trailing: _AddToPill(
+                    inWatchlist: inWatchlist,
+                    isCompleted: isCompleted,
+        isOngoing: isOngoing,
+                    onAddWatchlist: () async {
+                      final id = await search.ensureDetailInStorage(storage, s);
+                      storage.toggleWatchlist(storage.byId(id));
+                    },
+                    onRemoveWatchlist: () {
+                      if (!storage.exists(s.id)) return;
+                      storage.removeFromWatchlist(s.id);
+                    },
+                    onAddCompleted: () async {
+                      final id = await search.ensureDetailInStorage(storage, s);
+                      storage.markCompleted(storage.byId(id));
+                    },
+                    onRemoveCompleted: () {
+                      if (!storage.exists(s.id)) return;
+                      storage.removeFromCompleted(s.id);
+                    },
+      ),
             );
 
           case MultiKind.person:
@@ -327,6 +344,7 @@ class _AddToPill extends StatelessWidget {
   const _AddToPill({
     required this.inWatchlist,
     required this.isCompleted,
+  required this.isOngoing,
     required this.onAddWatchlist,
     required this.onRemoveWatchlist,
     required this.onAddCompleted,
@@ -335,6 +353,7 @@ class _AddToPill extends StatelessWidget {
 
   final bool inWatchlist;
   final bool isCompleted;
+  final bool isOngoing;
   final Future<void> Function() onAddWatchlist;
   final VoidCallback onRemoveWatchlist;
   final Future<void> Function() onAddCompleted;
@@ -361,6 +380,11 @@ class _AddToPill extends StatelessWidget {
       icon = Icons.bookmark;
       bg = yellow;
       fg = Colors.black;
+    } else if (isOngoing) {
+      label = 'Ongoing';
+      icon = Icons.play_circle_fill;
+      bg = theme.colorScheme.primary;
+      fg = theme.colorScheme.onPrimary;
     } else {
       label = 'Add to…';
       icon = Icons.add;

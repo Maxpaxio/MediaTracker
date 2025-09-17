@@ -1,6 +1,6 @@
 {
-    "name": "tv_trackerios",
-    "short_name": "tv_trackerios",
+    "name": "MediaTracker",
+    "short_name": "MediaTracker",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

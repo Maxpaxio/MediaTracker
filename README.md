@@ -1,4 +1,4 @@
-# tv_trackerios
+# MediaTracker
 
 An application in which you can track TV Shows in.
 

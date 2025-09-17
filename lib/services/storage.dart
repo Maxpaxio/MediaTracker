@@ -333,6 +333,21 @@ class AppStorage extends ChangeNotifier {
       updated = updated.copyWith(flag: WatchFlag.none);
     }
 
+    // Keep Completed only if ALL episodes are checked; otherwise drop it.
+    final total = updated.totalEpisodes;
+    final watchedAll = total > 0 && updated.watchedEpisodes >= total;
+    if (watchedAll) {
+      // Mark as completed (covers transitioning from none/watchlist → completed).
+      if (!updated.isCompleted) {
+        updated = updated.copyWith(flag: WatchFlag.completed);
+      }
+    } else {
+      // Not fully done: ensure we are NOT in completed anymore.
+      if (updated.isCompleted) {
+        updated = updated.copyWith(flag: WatchFlag.none);
+      }
+    }
+
     _shows[idx] = updated;
     _persist();
     notifyListeners();

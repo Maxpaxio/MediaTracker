@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'storage.dart';
+import 'tmdb_api.dart';
 
 enum MultiKind { tv, movie, person }
 
@@ -190,6 +191,22 @@ class MultiSearchController extends ChangeNotifier {
 
   Future<int> ensureDetailInStorage(AppStorage storage, Show lite) async {
     if (storage.exists(lite.id)) return lite.id;
+
+    // For TV shows, fetch full detail so seasons/episodes exist before mutations
+    if (lite.mediaType == MediaType.tv) {
+      try {
+        final api = TmdbApi();
+        final full = await api.fetchShowDetailStorage(lite.id);
+        storage.ensureShow(full);
+        return lite.id;
+      } catch (_) {
+        // Fallback to lite if API fails
+        storage.ensureShow(lite);
+        return lite.id;
+      }
+    }
+
+    // Movies don't need seasons; lite is fine
     storage.ensureShow(lite);
     return lite.id;
   }

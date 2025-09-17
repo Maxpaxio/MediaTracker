@@ -1,4 +1,4 @@
-name: tv_trackerios
+name: mediatracker
 description: "A new Flutter project."
 publish_to: 'none' # Remove this line if you want to publish to pub.dev
 
@@ -37,6 +37,4 @@ flutter:
   uses-material-design: true
 
   assets:
-    # Add your SVG or image assets here if needed, e.g.:
-    # - assets/logos/netflix.svg
-    # - assets/logos/hbo.svg
+  - assets/logos/
