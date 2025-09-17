@@ -93086,7 +93086,7 @@ $S:538}
 A.Qu.prototype={
 J(a){var s=null,r=A.y4(B.al,s,s),q=r.ax.aqS(B.k,B.kk,B.kk,B.kw)
 q=r.aqT(B.Dd,new A.qq(s,B.hw,s,s,s,B.a3,new A.cX(A.Av(new A.aQ(16,16)),B.p)),q,B.JH,A.aOd(new A.iD(4,A.bP(14),B.p),s,B.Kx,s,B.hw,!0),B.TO,B.kw,r.ok.aor(B.k,B.k))
-return new A.FJ(this.c,new A.FX(this.d,new A.Fj(this.e,new A.D3(A.a8(["/",new A.ahw(),"/settings",new A.ahx(),"/films",new A.ahy(),"/tv",new A.ahz(),"/ongoing",new A.ahA(),"/completed",new A.ahB(),"/watchlist",new A.ahC(),"/movies/completed",new A.ahD(),"/movies/watchlist",new A.ahE(),"/sync-connect",new A.ahF()],t.N,t.Ab),new A.ahG(),"TV Tracker",q,!1,s),s),s),s)}}
+return new A.FJ(this.c,new A.FX(this.d,new A.Fj(this.e,new A.D3(A.a8(["/",new A.ahw(),"/settings",new A.ahx(),"/films",new A.ahy(),"/tv",new A.ahz(),"/ongoing",new A.ahA(),"/completed",new A.ahB(),"/watchlist",new A.ahC(),"/movies/completed",new A.ahD(),"/movies/watchlist",new A.ahE(),"/sync-connect",new A.ahF()],t.N,t.Ab),new A.ahG(),"MediaTracker",q,!1,s),s),s),s)}}
 A.ahw.prototype={
 $1(a){return B.Ro},
 $S:539}

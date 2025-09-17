@@ -31,7 +31,7 @@ jobs:
 
       - name: Build (base-href must match repo name + case)
         run: |
-          flutter build web --release --base-href "/TV-Tracker/"
+          flutter build web --release --base-href "/MediaTracker/"
           cp build/web/index.html build/web/404.html
 
       - name: Upload artifact for Pages

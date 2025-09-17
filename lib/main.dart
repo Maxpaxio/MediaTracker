@@ -46,7 +46,7 @@ class MediaTrackerApp extends StatelessWidget {
         child: SettingsScope(
           controller: settings,
           child: MaterialApp(
-            title: 'TV Tracker',
+            title: 'MediaTracker',
             debugShowCheckedModeBanner: false,
             theme: buildDarkTheme(),
             routes: {
