@@ -82,6 +82,18 @@
     setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 60);
   });
   </script>
+  <script>
+  // Remove loading overlay when Flutter paints first frame (or after timeout)
+  (function(){
+    function hideBootStatus(){
+      var el = document.getElementById('boot-status');
+      if (el && el.parentNode) { el.parentNode.removeChild(el); }
+    }
+    window.addEventListener('flutter-first-frame', hideBootStatus);
+    // Fallback: if event is missed, hide after 15 seconds
+    setTimeout(hideBootStatus, 15000);
+  })();
+  </script>
   <script src="flutter_bootstrap.js" defer></script>
 </body>
 </html>
