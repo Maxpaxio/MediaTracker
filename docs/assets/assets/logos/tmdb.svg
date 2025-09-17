@@ -1,0 +1,5 @@
+<!-- Placeholder TMDb logo. Replace this file with the official TMDb SVG you have. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" role="img" aria-label="TMDb">
+  <rect width="200" height="40" rx="6" fill="#01d277"/>
+  <text x="20" y="26" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#002a32" font-weight="700">TMDb</text>
+</svg>

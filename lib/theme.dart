@@ -26,7 +26,7 @@ ThemeData buildDarkTheme() {
         color: onSurface,
       ),
     ),
-    // ✅ FIX: use CardThemeData instead of CardTheme
+    // Card style
     cardTheme: CardThemeData(
       color: surface2,
       shape: RoundedRectangleBorder(
