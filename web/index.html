@@ -34,13 +34,47 @@
   <link rel="manifest" href="manifest.json">
   <style>
     html, body { height: 100%; }
-    body { margin: 0; background: #1B1B1E; }
+    body { margin: 0; background: #1B1B1E; color: #e8e8ea; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
+    #boot-status { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+    #boot-status .bubble { background: rgba(32,32,36,.9); border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 14px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 14px; }
+    #boot-error { display: none; white-space: pre-wrap; margin-top: 6px; color: #ff9aa2; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; max-width: 72ch; }
   </style>
 </head>
 <body>
+  <div id="boot-status" aria-live="polite">
+    <div class="bubble">
+      <div>Loading MediaTracker…</div>
+      <div id="boot-error"></div>
+    </div>
+  </div>
   <script>
     // Ensure no legacy Flutter Web config remains to avoid conflicts with engineInitializer.
     try { delete window.flutterConfiguration; } catch (_) { window.flutterConfiguration = undefined; }
+  </script>
+  <script>
+  // One-time Service Worker cleanup to prevent stale SW from blanking the page on GitHub Pages
+  (function() {
+    try {
+      if ('serviceWorker' in navigator && !sessionStorage.getItem('sw-cleaned')) {
+        navigator.serviceWorker.getRegistration().then(function(reg) {
+          if (!reg) return; // No SW controlling
+          sessionStorage.setItem('sw-cleaned', '1');
+          reg.unregister().then(function() {
+            return caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); });
+          }).finally(function(){ location.reload(); });
+        });
+      }
+    } catch (_) { /* ignore */ }
+  })();
+  // Basic runtime error overlay to surface startup errors instead of a blank page
+  (function() {
+    var errBox = document.getElementById('boot-error');
+    function showError(msg) {
+      if (!errBox) return; errBox.style.display = 'block'; errBox.textContent = String(msg || 'Unknown error');
+    }
+    window.addEventListener('error', function(e){ showError(e && (e.message || e.error) || 'Script error'); });
+    window.addEventListener('unhandledrejection', function(e){ showError(e && (e.reason && (e.reason.stack || e.reason.message) || e.reason) || 'Unhandled promise rejection'); });
+  })();
   </script>
   <script>
   // Kick a resize after first load to avoid iOS Safari initial layout quirk
