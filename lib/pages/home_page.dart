@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/brand_logo.dart';
 import '../services/storage.dart';
 import '../services/show_search_controller.dart';
 import '../services/multi_search_controller.dart'; // NEW: to integrate multi search
@@ -9,6 +10,7 @@ import '../widgets/section_title.dart';
 import '../widgets/watchlist_poster.dart';
 import '../widgets/completed_poster.dart';
 import '../widgets/provider_mini_grid.dart';
+import 'search_results_page.dart';
 import 'all_ongoing_page.dart';
 import 'all_completed_page.dart';
 import 'all_watchlist_page.dart';
@@ -111,12 +113,23 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           title: const Text('TV'),
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu),
-              tooltip: 'Menu',
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
+          leadingWidth: 96,
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  tooltip: 'Menu',
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.home),
+                tooltip: 'Home',
+                onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+              ),
+            ],
           ),
           actions: [
             Builder(builder: (context) {
@@ -144,16 +157,35 @@ class _HomePageState extends State<HomePage> {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                const DrawerHeader(
-                  child: Text('MediaTracker',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                DrawerHeader(
+                  margin: EdgeInsets.zero,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // New brand logo
+                      const BrandLogo(height: 72),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'MediaTracker',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.search),
-                  title: const Text('Search / Home'),
-                  onTap: () => Navigator.pushReplacementNamed(context, '/'),
+                  title: const Text('Search'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, SearchResultsPage.route);
+                  },
                 ),
+                // Home moved to AppBar; removed from drawer
                 ListTile(
                   leading: const Icon(Icons.live_tv),
                   title: const Text('TV'),

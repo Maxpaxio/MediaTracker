@@ -11,7 +11,7 @@ class TmdbAttribution extends StatefulWidget {
   const TmdbAttribution({
     super.key,
     this.center = true,
-    this.height = 20,
+    this.height = 16,
     this.textAbove = false,
   });
   final bool center;
@@ -33,61 +33,28 @@ class _TmdbAttributionState extends State<TmdbAttribution> {
 
   /// Return the first existing TMDb logo asset path, else null.
   Future<String?> _resolveAssetPath() async {
+    // Always prefer this specific mark
     const candidates = <String>[
-  // Explicit colored fallback name if provided
-  'assets/logos/tmdb-color.svg',
-      // Prefer full brand lockups first if present
-      'assets/logos/The Movie DB 1.svg',
-      'assets/logos/The Movie DB.svg',
-      // Then the shorter marks
-      'assets/logos/TMDB 2.svg',
+      // Prefer filename without spaces for web asset fetch stability
+      'assets/logos/tmdb_1.svg',
       'assets/logos/TMDB 1.svg',
+      // Fallbacks if the preferred asset is missing
+      'assets/logos/TMDB 2.svg',
+  'assets/logos/tmdb-color.svg',
     ];
 
-    final existing = <String>[];
     for (final path in candidates) {
       try {
         await rootBundle.load(path); // existence check
-        existing.add(path);
+        return path;
       } catch (_) {
-        // continue
+        // continue to next candidate
       }
     }
-    if (existing.isEmpty) return null;
-
-    // Prefer a colored SVG among the existing ones
-    for (final path in existing) {
-      try {
-        final data = await rootBundle.loadString(path);
-        if (_isColoredSvg(data)) return path;
-      } catch (_) {
-        // ignore and continue
-      }
-    }
-    // Fallback: first existing
-    return existing.first;
+    return null;
   }
 
-  bool _isColoredSvg(String data) {
-    final s = data.toLowerCase();
-    if (s.contains('lineargradient') || s.contains('radialgradient')) {
-      return true;
-    }
-    // Look for non-black/white color literals in fill or stroke
-    // Accepts hex like #01d277 or named colors other than white/black/currentColor
-    final colorAttrs = RegExp(r'(fill|stroke)\s*=\s*"([^"]+)"');
-    for (final m in colorAttrs.allMatches(s)) {
-      final v = m.group(2)?.trim() ?? '';
-      if (v.isEmpty) continue;
-      if (v == 'none') continue;
-      if (v == 'currentcolor') continue;
-      if (v == '#000' || v == '#000000') continue;
-      if (v == '#fff' || v == '#ffffff') continue;
-      if (v == 'black' || v == 'white') continue;
-      return true; // found a color that isn't black/white/current
-    }
-    return false;
-  }
+  // Removed color detection; we now explicitly prefer 'TMDB 1.svg'.
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +67,7 @@ class _TmdbAttributionState extends State<TmdbAttribution> {
       future: _assetPathFuture,
       builder: (context, snap) {
   final hasLogo = (snap.data != null && snap.data!.isNotEmpty);
-  const tmdbGreen = Color(0xFF01D277);
+  // TMDb green retained for reference (not used when rendering native SVG colors).
         assert(() {
           // Debug which asset was picked in debug/profile builds
           // (won't execute in release mode).
@@ -117,7 +84,6 @@ class _TmdbAttributionState extends State<TmdbAttribution> {
             ? SvgPicture.asset(
                 snap.data!,
                 height: widget.height,
-    theme: const SvgTheme(currentColor: tmdbGreen),
                 semanticsLabel: 'TMDb',
               )
             : Icon(Icons.movie, size: widget.height - 2, color: Colors.white70);

@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../services/sync_file_service.dart';
 import '../services/google_oauth.dart';
+import '../widgets/brand_logo.dart';
+import 'home_page.dart';
+import 'films_page.dart';
+import 'search_results_page.dart';
 
 class SyncConnectPage extends StatefulWidget {
   static const route = '/sync-connect';
@@ -131,7 +135,81 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
     final connected = ep != null && sync.state != SyncFileState.disconnected;
     final isDrive = ep?.backend == SyncBackend.googleDrive;
     return Scaffold(
-      appBar: AppBar(title: const Text('Connect Storage')),
+      appBar: AppBar(
+        title: const Text('Connect Storage'),
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                tooltip: 'Menu',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.home),
+              tooltip: 'Home',
+              onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+            ),
+          ],
+        ),
+      ),
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: const [
+                    BrandLogo(height: 72),
+                    SizedBox(height: 12),
+                    Text(
+                      'MediaTracker',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.search),
+                title: const Text('Search'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, SearchResultsPage.route);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.live_tv),
+                title: const Text('TV'),
+                onTap: () => Navigator.pushReplacementNamed(context, HomePage.route),
+              ),
+              ListTile(
+                leading: const Icon(Icons.movie),
+                title: const Text('Films'),
+                onTap: () => Navigator.pushReplacementNamed(context, FilmsPage.route),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.cloud),
+                title: const Text('Cloud storage'),
+                onTap: () => Navigator.pop(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Settings'),
+                onTap: () => Navigator.pushNamed(context, '/settings'),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

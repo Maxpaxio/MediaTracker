@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/brand_logo.dart';
 import '../services/storage.dart';
 import '../services/multi_search_controller.dart';
 import '../services/sync_file_service.dart';
@@ -8,6 +9,7 @@ import 'show_detail_page.dart';
 import 'sync_connect_page.dart';
 import 'subpages/more_info_page.dart'; // for PersonCreditsPage
 import '../widgets/tmdb_attribution.dart';
+import 'search_results_page.dart';
 
 class MediaHomePage extends StatefulWidget {
   static const route = '/';
@@ -63,6 +65,15 @@ class _MediaHomePageState extends State<MediaHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Seed initial query from navigation arguments (e.g., drawer search)
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map && args['initialQuery'] is String) {
+      final q = (args['initialQuery'] as String).trim();
+      if (q.isNotEmpty && search.text.text != q) {
+        search.text.text = q;
+        search.onChanged(q);
+      }
+    }
     final hasQuery = search.text.text.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
@@ -100,16 +111,34 @@ class _MediaHomePageState extends State<MediaHomePage> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
-              const DrawerHeader(
-                child: Text('MediaTracker',
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const BrandLogo(height: 72),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'MediaTracker',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.search),
-                title: const Text('Search / Home'),
-                onTap: () => Navigator.pop(context),
+                title: const Text('Search'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, SearchResultsPage.route);
+                },
               ),
+              // Home is already current; removed from drawer for consistency with TV/Films
               ListTile(
                 leading: const Icon(Icons.live_tv),
                 title: const Text('TV'),

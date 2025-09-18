@@ -15,6 +15,7 @@ import 'pages/all_movies_completed_page.dart';
 import 'pages/all_movies_watchlist_page.dart';
 import 'services/settings_controller.dart';
 import 'pages/settings_page.dart';
+import 'pages/search_results_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +55,7 @@ class MediaTrackerApp extends StatelessWidget {
               SettingsPage.route: (_) => const SettingsPage(),
               FilmsPage.route: (_) => const FilmsPage(),
               HomePage.route: (_) => const HomePage(),
+              SearchResultsPage.route: (_) => const SearchResultsPage(),
               AllOngoingPage.route: (_) => const AllOngoingPage(),
               AllCompletedPage.route: (_) => const AllCompletedPage(),
               AllWatchlistPage.route: (_) => const AllWatchlistPage(),
