@@ -38,6 +38,9 @@ jobs:
         run: |
           flutter build web --release --base-href "/MediaTracker/"
           cp build/web/index.html build/web/404.html
+          # Overwrite default PWA icons with our app logo to ensure branding
+          cp assets/logos/MediaTrackerLogo.png build/web/icons/Icon-192.png || true
+          cp assets/logos/MediaTrackerLogo.png build/web/icons/Icon-512.png || true
           echo "Build output contents:"
           ls -la build/web
           echo "Disk usage:"
