@@ -130,8 +130,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
           final rts = await api.fetchSeasonEpisodeRuntimes(show.id, season.seasonNumber);
           int sum = 0;
           for (var i = 0; i < w; i++) {
-            final rt = (i < rts.length ? rts[i] : 0);
-            if (rt > 0) sum += rt; else { sum += fallbackEpisodeMinutes; usedFallback = true; }
+            final int rt = (i < rts.length ? (rts[i] as int) : 0);
+            if (rt > 0) {
+              sum += rt;
+            } else {
+              sum += fallbackEpisodeMinutes;
+              usedFallback = true;
+            }
           }
           tvMinutes += sum;
         } catch (_) {
