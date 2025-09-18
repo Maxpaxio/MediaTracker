@@ -14,6 +14,28 @@ class AllCompletedPage extends StatefulWidget {
 
 class _AllCompletedPageState extends State<AllCompletedPage> {
   ShowSortMode _mode = ShowSortMode.lastAdded;
+  bool _ascending = defaultAscendingFor(ShowSortMode.lastAdded);
+
+  static const _kModeKey = 'sort.completed.mode';
+  static const _kAscKey = 'sort.completed.asc';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final storage = StorageScope.of(context);
+      final savedMode = storage.readInt(_kModeKey);
+      final savedAsc = storage.readBool(_kAscKey);
+      if (savedMode != null && savedMode >= 0 && savedMode < ShowSortMode.values.length) {
+        setState(() {
+          _mode = ShowSortMode.values[savedMode];
+          _ascending = savedAsc ?? defaultAscendingFor(_mode);
+        });
+      } else if (savedAsc != null) {
+        setState(() => _ascending = savedAsc);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,12 +43,26 @@ class _AllCompletedPageState extends State<AllCompletedPage> {
     .completed
     .where((s) => s.mediaType == MediaType.tv)
     .toList()
-    .sortedBy(_mode);
+    .sortedBy(_mode, ascending: _ascending);
     return Scaffold(
       appBar: AppBar(
         title: Text('Completed (${items.length})'),
         actions: [
-          _SortButton(mode: _mode, onChanged: (m) => setState(() => _mode = m)),
+          _SortButton(
+            mode: _mode,
+            ascending: _ascending,
+            onChanged: (m) => setState(() {
+              if (m == _mode) {
+                _ascending = !_ascending;
+              } else {
+                _mode = m;
+                _ascending = defaultAscendingFor(m);
+              }
+              final storage = StorageScope.of(context);
+              storage.writeInt(_kModeKey, _mode.index);
+              storage.writeBool(_kAscKey, _ascending);
+            }),
+          ),
         ],
       ),
       body: LayoutBuilder(
@@ -53,14 +89,22 @@ class _AllCompletedPageState extends State<AllCompletedPage> {
 }
 
 class _SortButton extends StatelessWidget {
-  const _SortButton({required this.mode, required this.onChanged});
+  const _SortButton({required this.mode, required this.ascending, required this.onChanged});
   final ShowSortMode mode;
+  final bool ascending;
   final ValueChanged<ShowSortMode> onChanged;
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<ShowSortMode>(
       tooltip: 'Sort',
-      icon: const Icon(Icons.sort),
+      icon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.sort),
+          const SizedBox(width: 4),
+          Icon(ascending ? Icons.arrow_upward : Icons.arrow_downward, size: 16),
+        ],
+      ),
       initialValue: mode,
       onSelected: onChanged,
       itemBuilder: (_) => const [

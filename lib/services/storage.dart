@@ -171,6 +171,16 @@ class AppStorage extends ChangeNotifier {
     _purgeSeedDemoIfPresent();
   }
 
+  // UI preferences (lightweight key-value helpers)
+  int? readInt(String key) => _prefs.getInt(key);
+  bool? readBool(String key) => _prefs.getBool(key);
+  Future<void> writeInt(String key, int value) async {
+    await _prefs.setInt(key, value);
+  }
+  Future<void> writeBool(String key, bool value) async {
+    await _prefs.setBool(key, value);
+  }
+
 // READS
   List<Show> get ongoing => _shows
       .where(

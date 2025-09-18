@@ -43,39 +43,72 @@ String _franchiseKey(Show s) {
 }
 
 extension ShowSorting on List<Show> {
-  List<Show> sortedBy(ShowSortMode mode) {
+  List<Show> sortedBy(ShowSortMode mode, {bool ascending = true}) {
     final list = List<Show>.from(this);
     switch (mode) {
       case ShowSortMode.lastAdded:
-        list.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+        // ascending: oldest added first; descending: newest added first
+        list.sort((a, b) {
+          final cmp = a.addedAt.compareTo(b.addedAt);
+          return ascending ? cmp : -cmp;
+        });
         break;
       case ShowSortMode.alphabetical:
-        list.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        list.sort((a, b) {
+          final cmp = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          return ascending ? cmp : -cmp;
+        });
         break;
       case ShowSortMode.releaseYear:
         list.sort((a, b) {
           final ya = _yearOf(a);
           final yb = _yearOf(b);
-          if (ya == yb) return a.title.toLowerCase().compareTo(b.title.toLowerCase());
-          // Descending (newer first). Change to ascending by swapping a/b.
-          return yb.compareTo(ya);
+          int cmp;
+          if (ya == yb) {
+            cmp = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          } else {
+            // ascending: oldest first; descending: newest first
+            cmp = ya.compareTo(yb);
+          }
+          return ascending ? cmp : -cmp;
         });
         break;
       case ShowSortMode.franchise:
         list.sort((a, b) {
           final fa = _franchiseKey(a);
           final fb = _franchiseKey(b);
-          final c = fa.compareTo(fb);
-          if (c != 0) return c;
+          int c = fa.compareTo(fb);
+          if (c != 0) return ascending ? c : -c;
           // within franchise, order by release year then title
           final ya = _yearOf(a);
           final yb = _yearOf(b);
-          final yc = ya.compareTo(yb);
-          if (yc != 0) return yc;
-          return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          c = ya.compareTo(yb);
+          if (c != 0) return ascending ? c : -c;
+          c = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          return ascending ? c : -c;
         });
         break;
     }
     return list;
+  }
+}
+
+/// Provides the default "ascending" direction for each [ShowSortMode].
+///
+/// Rationale:
+/// - lastAdded: default to newest-first (descending) so users see recent items.
+/// - alphabetical: A→Z ascending by default.
+/// - releaseYear: oldest→newest ascending by default (per user example).
+/// - franchise: A→Z by franchise name ascending by default.
+bool defaultAscendingFor(ShowSortMode mode) {
+  switch (mode) {
+    case ShowSortMode.lastAdded:
+      return false; // newest first
+    case ShowSortMode.alphabetical:
+      return true; // A→Z
+    case ShowSortMode.releaseYear:
+      return true; // oldest→newest
+    case ShowSortMode.franchise:
+      return true; // A→Z
   }
 }

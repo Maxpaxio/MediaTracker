@@ -14,19 +14,56 @@ class AllOngoingPage extends StatefulWidget {
 
 class _AllOngoingPageState extends State<AllOngoingPage> {
   ShowSortMode _mode = ShowSortMode.lastAdded;
+  bool _ascending = defaultAscendingFor(ShowSortMode.lastAdded);
+
+  static const _kModeKey = 'sort.ongoing.mode';
+  static const _kAscKey = 'sort.ongoing.asc';
+
+  @override
+  void initState() {
+    super.initState();
+    // Delay reading prefs until context has StorageScope
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final storage = StorageScope.of(context);
+      final savedMode = storage.readInt(_kModeKey);
+      final savedAsc = storage.readBool(_kAscKey);
+      if (savedMode != null && savedMode >= 0 && savedMode < ShowSortMode.values.length) {
+        setState(() {
+          _mode = ShowSortMode.values[savedMode];
+          _ascending = savedAsc ?? defaultAscendingFor(_mode);
+        });
+      } else if (savedAsc != null) {
+        setState(() => _ascending = savedAsc);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final items = StorageScope.of(context)
-        .ongoing
-        .where((s) => s.mediaType == MediaType.tv)
-        .toList()
-        .sortedBy(_mode);
+  final items = StorageScope.of(context)
+    .ongoing
+    .where((s) => s.mediaType == MediaType.tv)
+    .toList()
+    .sortedBy(_mode, ascending: _ascending);
     return Scaffold(
       appBar: AppBar(
         title: Text('Ongoing (${items.length})'),
         actions: [
-          _SortButton(mode: _mode, onChanged: (m) => setState(() => _mode = m)),
+          _SortButton(
+            mode: _mode,
+            ascending: _ascending,
+            onChanged: (m) => setState(() {
+              if (m == _mode) {
+                _ascending = !_ascending; // toggle direction on repeat
+              } else {
+                _mode = m;
+                _ascending = defaultAscendingFor(m);
+              }
+              final storage = StorageScope.of(context);
+              storage.writeInt(_kModeKey, _mode.index);
+              storage.writeBool(_kAscKey, _ascending);
+            }),
+          ),
         ],
       ),
       body: LayoutBuilder(
@@ -53,14 +90,22 @@ class _AllOngoingPageState extends State<AllOngoingPage> {
 }
 
 class _SortButton extends StatelessWidget {
-  const _SortButton({required this.mode, required this.onChanged});
+  const _SortButton({required this.mode, required this.ascending, required this.onChanged});
   final ShowSortMode mode;
+  final bool ascending;
   final ValueChanged<ShowSortMode> onChanged;
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<ShowSortMode>(
       tooltip: 'Sort',
-      icon: const Icon(Icons.sort),
+      icon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.sort),
+          const SizedBox(width: 4),
+          Icon(ascending ? Icons.arrow_upward : Icons.arrow_downward, size: 16),
+        ],
+      ),
       initialValue: mode,
       onSelected: onChanged,
       itemBuilder: (_) => const [
