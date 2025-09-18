@@ -188,10 +188,16 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
             const SizedBox(height: 16),
             Expanded(
               child: hasQuery
-                  ? (search.searching
-                      ? const Center(child: CircularProgressIndicator())
-                      : _ResultsList(search: search, onOpen: _openShow))
-                  : const Center(child: Text('Type to start searching')), 
+                  ? AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 150),
+                      child: search.searching
+                          ? const IgnorePointer(
+                              ignoring: true,
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          : _ResultsList(search: search, onOpen: _openShow),
+                    )
+                  : const Center(child: Text('Type to start searching')),
             ),
           ],
         ),

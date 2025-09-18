@@ -198,7 +198,10 @@ class _FilmsPageState extends State<FilmsPage> {
               child: search.searching
                   ? const Padding(
                       padding: EdgeInsets.only(top: 24),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: IgnorePointer(
+                        ignoring: true,
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
                     )
                   : const SizedBox.shrink(),
             ),

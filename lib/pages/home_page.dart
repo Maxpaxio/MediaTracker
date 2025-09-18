@@ -253,7 +253,10 @@ class _HomePageState extends State<HomePage> {
                 child: multiSearch.searching
                     ? const Padding(
                         padding: EdgeInsets.only(top: 24),
-                        child: Center(child: CircularProgressIndicator()),
+                        child: IgnorePointer(
+                          ignoring: true,
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
                       )
                     : const SizedBox.shrink(),
               ),
