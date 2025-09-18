@@ -404,6 +404,27 @@ class TmdbApi {
     }).toList(growable: false);
   }
 
+  /// Fetch per-episode runtimes (in minutes) for a specific season.
+  /// Returns a list where index (episodeNumber - 1) maps to the runtime in minutes.
+  /// If a runtime is missing, the value will be 0 (caller should apply fallback).
+  Future<List<int>> fetchSeasonEpisodeRuntimes(
+      int showId, int seasonNumber) async {
+    final uri = Uri.parse('$_base/tv/$showId/season/$seasonNumber')
+        .replace(queryParameters: {'api_key': _key, 'language': 'en-US'});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      return const <int>[];
+    }
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    final eps = (m['episodes'] as List?) ?? const [];
+    return eps.map<int>((e) {
+      final em =
+          (e as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+      final rt = (em['runtime'] as num?)?.toInt() ?? 0;
+      return rt;
+    }).toList(growable: false);
+  }
+
   // ---------------- MORE INFO (creators/companies/runtime) ----------------
 
   /// Fetch extra details for the More Info page: creators, companies, runtimes, etc.

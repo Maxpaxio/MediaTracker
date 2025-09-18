@@ -196,6 +196,11 @@ class _HomePageState extends State<HomePage> {
                   title: const Text('Films'),
                   onTap: () => Navigator.pushNamed(context, '/films'),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.insights),
+                  title: const Text('Statistics'),
+                  onTap: () => Navigator.pushNamed(context, '/stats'),
+                ),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.cloud),

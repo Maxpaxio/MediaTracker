@@ -117,32 +117,55 @@ class _StatisticsPageState extends State<StatisticsPage> {
       }
     }
 
-    // TV: sum per-episode runtimes for watched episodes only.
+    // TV: sum per-episode runtimes for watched episodes only (per-episode precision).
     int tvMinutes = 0;
     int watchedEpisodes = 0;
     final tvShows = storage.all.where((s) => s.mediaType == MediaType.tv);
+    // Simple in-memory cache for season runtimes to avoid duplicate requests in-session
+    final seasonCache = <String, List<int>>{}; // key: "showId-sN"
     for (final show in tvShows) {
+      // Precompute a per-show average to use as a fallback when a season call fails or lacks runtimes.
+      int avgEpisodeMinutes = fallbackEpisodeMinutes;
+      try {
+        final extras = await api.fetchShowExtras(show.id);
+        final list = extras.episodeRunTimes;
+        if (list.isNotEmpty) {
+          final total = list.fold<int>(0, (a, b) => a + b);
+          avgEpisodeMinutes = (total / list.length).round();
+        }
+      } catch (_) {
+        // ignore, keep fallback
+      }
+
       for (final season in show.seasons) {
         final w = season.watched.clamp(0, season.episodeCount);
         if (w <= 0) continue;
         watchedEpisodes += w;
+
+        final cacheKey = '${show.id}-${season.seasonNumber}';
+        List<int> rts;
         try {
-          final rts = await api.fetchSeasonEpisodeRuntimes(show.id, season.seasonNumber);
-          int sum = 0;
-          for (var i = 0; i < w; i++) {
-            final int rt = (i < rts.length ? rts[i] : 0);
-            if (rt > 0) {
-              sum += rt;
-            } else {
-              sum += fallbackEpisodeMinutes;
-              usedFallback = true;
-            }
-          }
-          tvMinutes += sum;
+          rts = seasonCache[cacheKey] ??
+              await api.fetchSeasonEpisodeRuntimes(show.id, season.seasonNumber);
+          seasonCache[cacheKey] = rts;
         } catch (_) {
-          tvMinutes += w * fallbackEpisodeMinutes;
+          // Fall back to average per-episode minutes when season endpoint fails
+          tvMinutes += w * avgEpisodeMinutes;
           usedFallback = true;
+          continue;
         }
+
+        int sum = 0;
+        for (var i = 0; i < w; i++) {
+          final int rt = (i < rts.length ? rts[i] : 0);
+          if (rt > 0) {
+            sum += rt;
+          } else {
+            sum += avgEpisodeMinutes;
+            usedFallback = true;
+          }
+        }
+        tvMinutes += sum;
       }
     }
 

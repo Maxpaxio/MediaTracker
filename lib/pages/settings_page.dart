@@ -135,6 +135,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: const Text('Films'),
                 onTap: () => Navigator.pushReplacementNamed(context, FilmsPage.route),
               ),
+              ListTile(
+                leading: const Icon(Icons.insights),
+                title: const Text('Statistics'),
+                onTap: () => Navigator.pushNamed(context, '/stats'),
+              ),
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.cloud),

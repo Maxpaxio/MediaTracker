@@ -16,6 +16,7 @@ import 'pages/all_movies_watchlist_page.dart';
 import 'services/settings_controller.dart';
 import 'pages/settings_page.dart';
 import 'pages/search_results_page.dart';
+import 'pages/statistics_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +64,7 @@ class MediaTrackerApp extends StatelessWidget {
                   const AllMoviesCompletedPage(),
               AllMoviesWatchlistPage.route: (_) =>
                   const AllMoviesWatchlistPage(),
+        StatisticsPage.route: (_) => const StatisticsPage(),
               SyncConnectPage.route: (_) => const SyncConnectPage(),
             },
             onGenerateRoute: (settings) {
