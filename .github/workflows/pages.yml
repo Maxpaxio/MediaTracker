@@ -24,6 +24,11 @@ jobs:
         with:
           channel: stable
 
+      - name: Flutter doctor
+        run: |
+          flutter --version
+          flutter doctor -v
+
       - name: Enable web & get deps
         run: |
           flutter config --enable-web
@@ -33,6 +38,10 @@ jobs:
         run: |
           flutter build web --release --base-href "/MediaTracker/"
           cp build/web/index.html build/web/404.html
+          echo "Build output contents:"
+          ls -la build/web
+          echo "Disk usage:"
+          du -sh build/web || true
 
       - name: Upload artifact for Pages
         uses: actions/upload-pages-artifact@v3
