@@ -17,6 +17,7 @@ import 'services/settings_controller.dart';
 import 'pages/settings_page.dart';
 import 'pages/search_results_page.dart';
 import 'pages/statistics_page.dart';
+import 'services/stats_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +27,9 @@ void main() async {
   await sync.init();
   final settings = SettingsController();
   await settings.init();
-  runApp(MediaTrackerApp(storage: storage, sync: sync, settings: settings));
+  final stats = StatsController(storage);
+  await stats.init();
+  runApp(MediaTrackerApp(storage: storage, sync: sync, settings: settings, stats: stats));
 }
 
 class MediaTrackerApp extends StatelessWidget {
@@ -34,10 +37,12 @@ class MediaTrackerApp extends StatelessWidget {
       {super.key,
       required this.storage,
       required this.sync,
-      required this.settings});
+      required this.settings,
+      required this.stats});
   final AppStorage storage;
   final SyncFileService sync;
   final SettingsController settings;
+  final StatsController stats;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +52,9 @@ class MediaTrackerApp extends StatelessWidget {
         sync: sync,
         child: SettingsScope(
           controller: settings,
-          child: MaterialApp(
+          child: StatsScope(
+            controller: stats,
+            child: MaterialApp(
             title: 'MediaTracker',
             debugShowCheckedModeBanner: false,
             theme: buildDarkTheme(),
@@ -89,6 +96,7 @@ class MediaTrackerApp extends StatelessWidget {
               }
               return null;
             },
+          ),
           ),
         ),
       ),

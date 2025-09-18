@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
-import '../services/tmdb_api.dart';
+// import '../services/tmdb_api.dart';
+import '../services/stats_controller.dart';
 import '../widgets/brand_logo.dart';
 import 'home_page.dart';
 import 'films_page.dart';
@@ -34,14 +35,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
   static const _prefMigratedKey = 'stats.breakdown.migrated';
   TimeBreakdown _breakdown = TimeBreakdown.hoursMinutes;
   bool _loadedPref = false;
-  Future<({
-    int totalMinutes,
-    int movieMinutes,
-    int tvMinutes,
-    int completedMovies,
-    int watchedEpisodes,
-    bool usedFallback
-  })>? _future;
+  // No longer compute on-demand; we use StatsScope snapshot.
 
   @override
   void didChangeDependencies() {
@@ -80,103 +74,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
         _breakdown = TimeBreakdown.values[useIdx];
       }
       _loadedPref = true;
-      _future ??= _computeStats(context);
+      // No-op here; StatsController runs in background.
     }
-  }
-
-  Future<({
-    int totalMinutes,
-    int movieMinutes,
-    int tvMinutes,
-    int completedMovies,
-    int watchedEpisodes,
-    bool usedFallback
-  })> _computeStats(BuildContext context) async {
-    final storage = StorageScope.of(context);
-    final api = TmdbApi();
-
-    // Movies: use TMDb movie extras runtime per completed movie
-    final movies = storage.completed.where((s) => s.mediaType == MediaType.movie);
-    int movieMinutes = 0;
-    int completedMovies = 0;
-    bool usedFallback = false;
-    for (final m in movies) {
-      completedMovies++;
-      try {
-        final extras = await api.fetchMovieExtras(m.id);
-        final rt = extras.runtime;
-        if (rt > 0) {
-          movieMinutes += rt;
-        } else {
-          movieMinutes += fallbackMovieMinutes;
-          usedFallback = true;
-        }
-      } catch (_) {
-        movieMinutes += fallbackMovieMinutes;
-        usedFallback = true;
-      }
-    }
-
-    // TV: sum per-episode runtimes for watched episodes only (per-episode precision).
-    int tvMinutes = 0;
-    int watchedEpisodes = 0;
-    final tvShows = storage.all.where((s) => s.mediaType == MediaType.tv);
-    // Simple in-memory cache for season runtimes to avoid duplicate requests in-session
-    final seasonCache = <String, List<int>>{}; // key: "showId-sN"
-    for (final show in tvShows) {
-      // Precompute a per-show average to use as a fallback when a season call fails or lacks runtimes.
-      int avgEpisodeMinutes = fallbackEpisodeMinutes;
-      try {
-        final extras = await api.fetchShowExtras(show.id);
-        final list = extras.episodeRunTimes;
-        if (list.isNotEmpty) {
-          final total = list.fold<int>(0, (a, b) => a + b);
-          avgEpisodeMinutes = (total / list.length).round();
-        }
-      } catch (_) {
-        // ignore, keep fallback
-      }
-
-      for (final season in show.seasons) {
-        final w = season.watched.clamp(0, season.episodeCount);
-        if (w <= 0) continue;
-        watchedEpisodes += w;
-
-        final cacheKey = '${show.id}-${season.seasonNumber}';
-        List<int> rts;
-        try {
-          rts = seasonCache[cacheKey] ??
-              await api.fetchSeasonEpisodeRuntimes(show.id, season.seasonNumber);
-          seasonCache[cacheKey] = rts;
-        } catch (_) {
-          // Fall back to average per-episode minutes when season endpoint fails
-          tvMinutes += w * avgEpisodeMinutes;
-          usedFallback = true;
-          continue;
-        }
-
-        int sum = 0;
-        for (var i = 0; i < w; i++) {
-          final int rt = (i < rts.length ? rts[i] : 0);
-          if (rt > 0) {
-            sum += rt;
-          } else {
-            sum += avgEpisodeMinutes;
-            usedFallback = true;
-          }
-        }
-        tvMinutes += sum;
-      }
-    }
-
-    return (
-      totalMinutes: movieMinutes + tvMinutes,
-      movieMinutes: movieMinutes,
-      tvMinutes: tvMinutes,
-      completedMovies: completedMovies,
-      watchedEpisodes: watchedEpisodes,
-      usedFallback: usedFallback,
-    );
   }
 
   String _formatByBreakdown(int minutes) {
@@ -373,23 +272,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
           ),
         ),
       ),
-      body: FutureBuilder<({
-        int totalMinutes,
-        int movieMinutes,
-        int tvMinutes,
-        int completedMovies,
-        int watchedEpisodes,
-        bool usedFallback
-      })>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snap.hasData) {
-            return const Center(child: Text('No data'));
-          }
-          final data = snap.data!;
+      body: Builder(builder: (context) {
+        final stats = StatsScope.of(context);
+        final data = stats.snapshot;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -446,8 +331,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
               ),
             ],
           );
-        },
-      ),
+      }),
     );
   }
 }
