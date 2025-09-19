@@ -4,6 +4,7 @@ import '../services/sync_file_service.dart';
 import '../services/storage.dart';
 import '../services/movie_search_controller.dart';
 import '../widgets/section_title.dart';
+import '../widgets/add_menu.dart';
 import 'search_results_page.dart';
 import '../widgets/completed_poster.dart';
 import '../widgets/watchlist_poster.dart';
@@ -153,6 +154,11 @@ class _FilmsPageState extends State<FilmsPage> {
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Abandoned'),
+                onTap: () => Navigator.pushNamed(context, '/abandoned'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.insights),
                 title: const Text('Statistics'),
                 onTap: () => Navigator.pushNamed(context, '/stats'),
@@ -238,9 +244,7 @@ class _FilmsPageState extends State<FilmsPage> {
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
                   final s = search.results[i];
-                  final existing = storage.tryGet(s.id);
-                  final inWatchlist = existing?.isWatchlist ?? false;
-                  final isCompleted = existing?.isCompleted ?? false;
+                  // ensure detail happens in AddMenu via ensureInStorage
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -276,25 +280,11 @@ class _FilmsPageState extends State<FilmsPage> {
                     );
                     // No need to refresh here; detail page updates storage
                   },
-                  trailing: _PillActions(
-                    inWatchlist: inWatchlist,
-                    isCompleted: isCompleted,
-                    onAddWatchlist: () async {
-                      final id = await search.ensureDetailInStorage(storage, s);
-                      storage.toggleWatchlist(storage.byId(id));
-                    },
-                    onRemoveWatchlist: () {
-                      if (!storage.exists(s.id)) return;
-                      storage.removeFromWatchlist(s.id);
-                    },
-                    onAddCompleted: () async {
-                      final id = await search.ensureDetailInStorage(storage, s);
-                      storage.markCompleted(storage.byId(id));
-                    },
-                    onRemoveCompleted: () {
-                      if (!storage.exists(s.id)) return;
-                      storage.removeFromCompleted(s.id);
-                    },
+                  trailing: AddMenu(
+                    showId: s.id,
+                    compact: true,
+                    ensureInStorage: () => search.ensureDetailInStorage(storage, s),
+                    onChanged: () {},
                   ),
                       ),
                       if (i < search.results.length - 1)
@@ -387,133 +377,5 @@ class _FilmsPageState extends State<FilmsPage> {
   }
 }
 
-class _PillActions extends StatelessWidget {
-  const _PillActions({
-    required this.inWatchlist,
-    required this.isCompleted,
-    required this.onAddWatchlist,
-    required this.onRemoveWatchlist,
-    required this.onAddCompleted,
-    required this.onRemoveCompleted,
-  });
-
-  final bool inWatchlist;
-  final bool isCompleted;
-  final Future<void> Function() onAddWatchlist;
-  final VoidCallback onRemoveWatchlist;
-  final Future<void> Function() onAddCompleted;
-  final VoidCallback onRemoveCompleted;
-
-  @override
-  Widget build(BuildContext context) {
-    const green = Color(0xFF22C55E);
-    const yellow = Color(0xFFFACC15);
-    final theme = Theme.of(context);
-
-    String label;
-    IconData icon;
-    Color? bg;
-    Color? fg;
-
-    if (isCompleted) {
-      label = 'Completed';
-      icon = Icons.check_circle;
-      bg = green;
-      fg = Colors.black;
-    } else if (inWatchlist) {
-      label = 'Watchlist';
-      icon = Icons.bookmark;
-      bg = yellow;
-      fg = Colors.black;
-    } else {
-      label = 'Not added';
-      icon = Icons.add;
-      bg = theme.colorScheme.surface;
-      fg = theme.colorScheme.onSurface;
-    }
-
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        shape: const StadiumBorder(),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        backgroundColor: bg,
-        foregroundColor: fg,
-        side: BorderSide(
-          color: (bg == theme.colorScheme.surface)
-              ? Colors.white24
-              : Colors.transparent,
-        ),
-      ),
-      onPressed: () async {
-        await showModalBottomSheet(
-          context: context,
-          backgroundColor: theme.cardColor,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          builder: (_) {
-            return SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (!inWatchlist)
-                    ListTile(
-                      leading: const Icon(Icons.bookmark_add_outlined),
-                      title: const Text('Add to Watchlist'),
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await onAddWatchlist();
-                      },
-                    )
-                  else
-                    ListTile(
-                      leading: const Icon(Icons.bookmark_remove_outlined),
-                      title: const Text('Remove from Watchlist'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onRemoveWatchlist();
-                      },
-                    ),
-                  const Divider(height: 1),
-                  if (!isCompleted)
-                    ListTile(
-                      leading: const Icon(Icons.check_circle_outline),
-                      title: const Text('Add to Completed'),
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await onAddCompleted();
-                      },
-                    )
-                  else
-                    ListTile(
-                      leading: const Icon(Icons.remove_circle_outline),
-                      title: const Text('Remove from Completed'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onRemoveCompleted();
-                      },
-                    ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            );
-          },
-        );
-      },
-      icon: Icon(icon),
-      label: Text(label),
-    );
-  }
-}
 
 // Removed old _FilmsSearchHeaderDelegate; SliverAppBar is used instead for the pinned search header.

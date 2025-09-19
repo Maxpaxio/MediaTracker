@@ -149,34 +149,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     }
   }
 
-  // Stacked short format for Films/TV trailing, matching requested style:
-  // y on one line, m on next, d on next, and final line shows "h min".
-  String _formatStackedYMDHmin(int minutes) {
-    const int minutesPerHour = 60;
-    const int minutesPerDay = 24 * minutesPerHour;
-    const int minutesPerMonth = 30 * minutesPerDay; // ~
-    const int minutesPerYear = 365 * minutesPerDay;
-
-    int rem = minutes;
-    final y = rem ~/ minutesPerYear; rem %= minutesPerYear;
-    final mo = rem ~/ minutesPerMonth; rem %= minutesPerMonth;
-    final d = rem ~/ minutesPerDay; rem %= minutesPerDay;
-    final h = rem ~/ minutesPerHour; rem %= minutesPerHour;
-    final m = rem;
-
-    final lines = <String>[];
-    if (y > 0) lines.add('${y}y');
-    if (mo > 0) lines.add('${mo}m');
-    if (d > 0) lines.add('${d}d');
-    // Always show the last line as hours + minutes (minutes shortened to 'min')
-    final last = (h > 0 && m > 0)
-        ? '${h}h ${m}min'
-        : (h > 0)
-            ? '${h}h'
-            : '${m}min';
-    lines.add(last);
-    return lines.join('\n');
-  }
+  // (Stacked formatter removed; Films/TV now follow the selected breakdown.)
 
   @override
   Widget build(BuildContext context) {
@@ -305,6 +278,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 onTap: () => Navigator.pushReplacementNamed(context, FilmsPage.route),
               ),
               ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Abandoned'),
+                onTap: () => Navigator.pushNamed(context, '/abandoned'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.insights),
                 title: const Text('Statistics'),
                 onTap: () => Navigator.pop(context),
@@ -376,9 +354,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   title: const Text('Films'),
                   subtitle: Text('${data.completedMovies} completed'),
                   trailing: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 80),
+                    constraints: const BoxConstraints(maxWidth: 180),
                     child: Text(
-                      _formatStackedYMDHmin(data.movieMinutes),
+                      _formatByBreakdown(data.movieMinutes),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.right,
                     ),
                   ),
@@ -391,9 +371,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   title: const Text('TV'),
                   subtitle: Text('${data.watchedEpisodes} episodes watched'),
                   trailing: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 80),
+                    constraints: const BoxConstraints(maxWidth: 180),
                     child: Text(
-                      _formatStackedYMDHmin(data.tvMinutes),
+                      _formatByBreakdown(data.tvMinutes),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.right,
                     ),
                   ),

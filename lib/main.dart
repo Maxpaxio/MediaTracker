@@ -18,6 +18,9 @@ import 'pages/settings_page.dart';
 import 'pages/search_results_page.dart';
 import 'pages/statistics_page.dart';
 import 'services/stats_controller.dart';
+import 'pages/abandoned_page.dart';
+import 'pages/all_abandoned_tv_page.dart';
+import 'pages/all_abandoned_movies_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +66,7 @@ class MediaTrackerApp extends StatelessWidget {
               SettingsPage.route: (_) => const SettingsPage(),
               FilmsPage.route: (_) => const FilmsPage(),
               HomePage.route: (_) => const HomePage(),
+              AbandonedPage.route: (_) => const AbandonedPage(),
               SearchResultsPage.route: (_) => const SearchResultsPage(),
               AllOngoingPage.route: (_) => const AllOngoingPage(),
               AllCompletedPage.route: (_) => const AllCompletedPage(),
@@ -71,6 +75,8 @@ class MediaTrackerApp extends StatelessWidget {
                   const AllMoviesCompletedPage(),
               AllMoviesWatchlistPage.route: (_) =>
                   const AllMoviesWatchlistPage(),
+        AllAbandonedTvPage.route: (_) => const AllAbandonedTvPage(),
+        AllAbandonedMoviesPage.route: (_) => const AllAbandonedMoviesPage(),
         StatisticsPage.route: (_) => const StatisticsPage(),
               SyncConnectPage.route: (_) => const SyncConnectPage(),
             },

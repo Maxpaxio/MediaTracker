@@ -8,6 +8,7 @@ import '../services/sync_file_service.dart';
 import 'sync_connect_page.dart';
 import '../widgets/section_title.dart';
 import '../widgets/watchlist_poster.dart';
+import '../widgets/add_menu.dart';
 import '../widgets/completed_poster.dart';
 import '../widgets/provider_mini_grid.dart';
 import 'search_results_page.dart';
@@ -199,6 +200,11 @@ class _HomePageState extends State<HomePage> {
                   leading: const Icon(Icons.movie),
                   title: const Text('Films'),
                   onTap: () => Navigator.pushNamed(context, '/films'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete),
+                  title: const Text('Abandoned'),
+                  onTap: () => Navigator.pushNamed(context, '/abandoned'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.insights),
@@ -565,13 +571,7 @@ class _SearchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final storage = StorageScope.of(context);
 
-    final existing = storage.tryGet(show.id);
-    final inWatchlist = existing?.isWatchlist ?? false;
-    final isCompleted = existing?.isCompleted ?? false;
-  final isOngoing = existing != null &&
-    !existing.isCompleted &&
-    !existing.isWatchlist &&
-    existing.watchedEpisodes > 0;
+  // state is determined by AddMenu via StorageScope
 
   return ListTile(
       onTap: onOpen,
@@ -596,27 +596,11 @@ class _SearchRow extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: _PillActionsButton(
-        inWatchlist: inWatchlist,
-        isCompleted: isCompleted,
-        isOngoing: isOngoing,
-        // Ensure detail before mutating, so we never insert an "empty seasons" show
-        onAddWatchlist: () async {
-          final id = await search.ensureDetailInStorage(storage, show);
-          storage.toggleWatchlist(storage.byId(id));
-        },
-        onRemoveWatchlist: () {
-          if (!storage.exists(show.id)) return;
-          storage.removeFromWatchlist(show.id);
-        },
-        onAddCompleted: () async {
-          final id = await search.ensureDetailInStorage(storage, show);
-          storage.markCompleted(storage.byId(id));
-        },
-        onRemoveCompleted: () {
-          if (!storage.exists(show.id)) return;
-          storage.removeFromCompleted(show.id);
-        },
+      trailing: AddMenu(
+        showId: show.id,
+        compact: true,
+        ensureInStorage: () => search.ensureDetailInStorage(storage, show),
+        onChanged: () {},
       ),
     );
   }
@@ -634,141 +618,5 @@ class ShowsSearchControllerAdapter {
 // Person search rows are only shown on the Home (Media) page, not on the TV page.
 
 /// Pill-shaped button that shows state and opens a bottom sheet with context-aware actions.
-class _PillActionsButton extends StatelessWidget {
-  const _PillActionsButton({
-    required this.inWatchlist,
-    required this.isCompleted,
-    required this.isOngoing,
-    required this.onAddWatchlist,
-    required this.onRemoveWatchlist,
-    required this.onAddCompleted,
-    required this.onRemoveCompleted,
-  });
-
-  final bool inWatchlist;
-  final bool isCompleted;
-  final bool isOngoing;
-  final Future<void> Function() onAddWatchlist;
-  final VoidCallback onRemoveWatchlist;
-  final Future<void> Function() onAddCompleted;
-  final VoidCallback onRemoveCompleted;
-
-  @override
-  Widget build(BuildContext context) {
-    // Colors
-    const green = Color(0xFF22C55E); // completed
-    const yellow = Color(0xFFFACC15); // watchlist
-    final theme = Theme.of(context);
-
-    String label;
-    IconData icon;
-    Color? bg;
-    Color? fg;
-
-    if (isCompleted) {
-      label = 'Completed';
-      icon = Icons.check_circle;
-      bg = green;
-      fg = Colors.black;
-    } else if (inWatchlist) {
-      label = 'Watchlist';
-      icon = Icons.bookmark;
-      bg = yellow;
-      fg = Colors.black;
-    } else if (isOngoing) {
-      label = 'Ongoing';
-      icon = Icons.play_circle_fill;
-      bg = theme.colorScheme.primary;
-      fg = theme.colorScheme.onPrimary;
-    } else {
-      label = 'Not added';
-      icon = Icons.add;
-      bg = theme.colorScheme.surface;
-      fg = theme.colorScheme.onSurface;
-    }
-
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        shape: const StadiumBorder(),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        backgroundColor: bg,
-        foregroundColor: fg,
-        side: BorderSide(
-          color: (bg == theme.colorScheme.surface)
-              ? Colors.white24
-              : Colors.transparent,
-        ),
-      ),
-      onPressed: () async {
-        await showModalBottomSheet(
-          context: context,
-          backgroundColor: theme.cardColor,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          builder: (_) {
-            return SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (!inWatchlist)
-                    ListTile(
-                      leading: const Icon(Icons.bookmark_add_outlined),
-                      title: const Text('Add to Watchlist'),
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await onAddWatchlist();
-                      },
-                    )
-                  else
-                    ListTile(
-                      leading: const Icon(Icons.bookmark_remove_outlined),
-                      title: const Text('Remove from Watchlist'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onRemoveWatchlist();
-                      },
-                    ),
-                  const Divider(height: 1),
-                  if (!isCompleted)
-                    ListTile(
-                      leading: const Icon(Icons.check_circle_outline),
-                      title: const Text('Add to Completed'),
-                      onTap: () async {
-                        Navigator.pop(context);
-                        await onAddCompleted();
-                      },
-                    )
-                  else
-                    ListTile(
-                      leading: const Icon(Icons.remove_circle_outline),
-                      title: const Text('Remove from Completed'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        onRemoveCompleted();
-                      },
-                    ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            );
-          },
-        );
-      },
-      icon: Icon(icon),
-      label: Text(label),
-    );
-  }
-}
 
 // (Ongoing badge replaced by using the unified pill with an "Ongoing" variant.)

@@ -92,6 +92,24 @@
 			],
 			"isBackground": false,
 			"group": "build"
+		},
+		{
+			"label": "flutter analyze lib (post-fix)",
+			"type": "shell",
+			"command": "C:\\flutter\\bin\\flutter.bat",
+			"args": [
+				"analyze",
+				"lib"
+			]
+		},
+		{
+			"label": "flutter analyze lib (post-fix)",
+			"type": "shell",
+			"command": "C:\\flutter\\bin\\flutter.bat",
+			"args": [
+				"analyze",
+				"lib"
+			]
 		}
 	]
 }

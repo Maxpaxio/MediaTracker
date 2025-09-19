@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum WatchFlag { none, watchlist, completed }
+enum WatchFlag { none, watchlist, completed, abandoned }
 
 enum MediaType { tv, movie }
 
@@ -121,6 +121,7 @@ class Show {
 
   bool get isCompleted => flag == WatchFlag.completed;
   bool get isWatchlist => flag == WatchFlag.watchlist;
+  bool get isAbandoned => flag == WatchFlag.abandoned;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -187,6 +188,7 @@ class AppStorage extends ChangeNotifier {
         (s) =>
             !s.isCompleted &&
             !s.isWatchlist &&
+            !s.isAbandoned &&
             s.watchedEpisodes > 0, // ← only if some progress exists
       )
       .toList();
@@ -195,6 +197,10 @@ class AppStorage extends ChangeNotifier {
 
   List<Show> get watchlist =>
       _shows.where((s) => s.isWatchlist && !s.isCompleted).toList();
+
+  /// Abandoned list
+  List<Show> get abandoned =>
+    _shows.where((s) => s.isAbandoned).toList();
 
   /// All shows (unordered). Use display-time ordering in UI.
   List<Show> get all => List.unmodifiable(_shows);
@@ -296,6 +302,35 @@ class AppStorage extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Mark as Abandoned (keeps current progress; exclusive with other flags)
+  void markAbandoned(Show show) {
+    final idx = _shows.indexWhere((s) => s.id == show.id);
+    final base = idx == -1 ? show : _shows[idx];
+    final updated = base.copyWith(
+      flag: WatchFlag.abandoned,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    if (idx == -1) {
+      _shows.add(updated);
+    } else {
+      _shows[idx] = updated;
+    }
+    _persist();
+    notifyListeners();
+  }
+
+  /// Remove Abandoned flag (set to none)
+  void removeFromAbandoned(int showId) {
+    final idx = _shows.indexWhere((s) => s.id == showId);
+    if (idx == -1) return;
+    _shows[idx] = _shows[idx].copyWith(
+      flag: WatchFlag.none,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    _persist();
+    notifyListeners();
+  }
+
   /// Completely forget a show ("unsee").
   void removeShow(int showId) {
     _shows.removeWhere((s) => s.id == showId);
@@ -340,6 +375,11 @@ class AppStorage extends ChangeNotifier {
 
     // If there is now any progress, clear watchlist.
     if (updated.isWatchlist && updated.watchedEpisodes > 0) {
+      updated = updated.copyWith(flag: WatchFlag.none);
+    }
+
+    // If show was Abandoned and user modifies progress, clear Abandoned.
+    if (updated.isAbandoned) {
       updated = updated.copyWith(flag: WatchFlag.none);
     }
 

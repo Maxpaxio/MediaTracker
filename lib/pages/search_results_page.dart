@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/multi_search_controller.dart';
 import '../services/storage.dart';
 import '../widgets/brand_logo.dart';
+import '../widgets/add_menu.dart';
 import 'home_page.dart';
 import 'films_page.dart';
 import 'settings_page.dart';
@@ -141,6 +142,11 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                 onTap: () => Navigator.pushReplacementNamed(context, FilmsPage.route),
               ),
               ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Abandoned'),
+                onTap: () => Navigator.pushNamed(context, '/abandoned'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.insights),
                 title: const Text('Statistics'),
                 onTap: () => Navigator.pushNamed(context, StatisticsPage.route),
@@ -263,6 +269,17 @@ class _ResultsList extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+              trailing: AddMenu(
+                showId: s.id,
+                onChanged: () {},
+                compact: true,
+                ensureInStorage: () async {
+                  final storage = StorageScope.of(context);
+                  try {
+                    await search.ensureDetailInStorage(storage, s);
+                  } catch (_) {}
+                },
+              ),
             );
           case MultiKind.person:
             final name = item.personName ?? '';
@@ -281,13 +298,25 @@ class _ResultsList extends StatelessWidget {
                 child: profile == null ? const Icon(Icons.person) : null,
               ),
               titleTextStyle: Theme.of(context).textTheme.titleMedium,
-              title: Text(name),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(Icons.person, size: 16, color: Colors.white70),
+                ],
+              ),
               subtitle: Text(
                 knownFor.isNotEmpty ? knownFor : 'Person',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.person, color: Colors.white70),
+              trailing: const SizedBox.shrink(),
             );
         }
       },

@@ -136,6 +136,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 onTap: () => Navigator.pushReplacementNamed(context, FilmsPage.route),
               ),
               ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Abandoned'),
+                onTap: () => Navigator.pushNamed(context, '/abandoned'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.insights),
                 title: const Text('Statistics'),
                 onTap: () => Navigator.pushNamed(context, '/stats'),

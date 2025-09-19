@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/add_menu.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/storage.dart';
@@ -364,7 +365,11 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     _ensureAvailableRegions(show.id, show.mediaType); // fire & forget
     return Scaffold(
       appBar: AppBar(
-        title: Text(show.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(
+          show.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       body: ListView(
         children: [
@@ -472,14 +477,58 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
                         if (mounted) setState(() {});
                       },
                     ),
+                  const SizedBox(height: 8),
+                  _AbandonRow(show: show),
                 ],
               ),
+            ),
+
+          if (show.mediaType == MediaType.movie)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: _AbandonRow(show: show),
             ),
 
           const SizedBox(height: 24),
         ],
       ),
       // bottomNavigationBar removed – Add-to menu handles actions
+    );
+  }
+}
+
+class _AbandonRow extends StatelessWidget {
+  const _AbandonRow({required this.show});
+  final Show show;
+
+  @override
+  Widget build(BuildContext context) {
+    final storage = StorageScope.of(context);
+    final isAbandoned = storage.tryGet(show.id)?.isAbandoned ?? false;
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: isAbandoned ? Colors.grey.shade800 : const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              side: BorderSide(color: isAbandoned ? Colors.white24 : const Color(0xFFDC2626)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            icon: Icon(isAbandoned ? Icons.restore : Icons.delete),
+            label: Text(isAbandoned ? 'Remove Abandoned' : 'Abandon'),
+            onPressed: () {
+              final cur = storage.tryGet(show.id);
+              if (cur == null) return;
+              if (!isAbandoned) {
+                storage.markAbandoned(cur);
+              } else {
+                storage.removeFromAbandoned(cur.id);
+              }
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -717,7 +766,7 @@ class _ProvidersBlock extends StatelessWidget {
                 const Expanded(
                   child: Text('Currently not available in your region'),
                 ),
-                _AddMenu(showId: showId, onChanged: onChanged),
+                AddMenu(showId: showId, onChanged: onChanged),
               ],
             ),
           ] else ...[
@@ -737,7 +786,7 @@ class _ProvidersBlock extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   if (rentBuy.isEmpty)
-                    _AddMenu(showId: showId, onChanged: onChanged),
+                    AddMenu(showId: showId, onChanged: onChanged),
                 ],
               ),
               const SizedBox(height: 8),
@@ -757,7 +806,7 @@ class _ProvidersBlock extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  _AddMenu(showId: showId, onChanged: onChanged),
+                  AddMenu(showId: showId, onChanged: onChanged),
                 ],
               ),
             ],
@@ -768,174 +817,6 @@ class _ProvidersBlock extends StatelessWidget {
   }
 }
 
-/// Logo-style “Add to…” menu button that **reflects current state**:
-/// - Watchlist → yellow pill, bookmark icon, “Watchlist”
-/// - Completed → green pill, check icon, “Completed”
-/// - Ongoing (progress > 0, not watchlist/completed) → primary color, play icon, “Ongoing”
-/// - None → outlined, plus icon, “Add to…”
-class _AddMenu extends StatelessWidget {
-  const _AddMenu({required this.showId, required this.onChanged});
-
-  final int showId;
-  final VoidCallback onChanged;
-
-  // State colors
-  static const _green = Color(0xFF22C55E); // completed
-  static const _yellow = Color(0xFFFACC15); // watchlist
-
-  @override
-  Widget build(BuildContext context) {
-    final storage = StorageScope.of(context);
-    final s = storage.tryGet(showId);
-
-    final bool isCompleted = s?.isCompleted ?? false;
-    final bool inWatchlist = s?.isWatchlist ?? false;
-    final bool isOngoing =
-        (s != null) && !inWatchlist && !isCompleted && s.watchedEpisodes > 0;
-
-    // Visuals based on state
-    Color? bg;
-    Color fg;
-    IconData icon;
-    String label;
-
-    if (isCompleted) {
-      bg = _green;
-      fg = Colors.black;
-      icon = Icons.check_circle;
-      label = 'Completed';
-    } else if (inWatchlist) {
-      bg = _yellow;
-      fg = Colors.black;
-      icon = Icons.bookmark;
-      label = 'Watchlist';
-    } else if (isOngoing) {
-      final scheme = Theme.of(context).colorScheme;
-      bg = scheme.primary;
-      fg = scheme.onPrimary;
-      icon = Icons.play_circle_fill;
-      label = 'Ongoing';
-    } else {
-      bg = null; // outlined
-      fg = Theme.of(context).colorScheme.onSurface;
-      icon = Icons.add;
-      label = 'Add to…';
-    }
-
-    return PopupMenuButton<_AddAction>(
-      offset: const Offset(0, 56),
-      tooltip: 'Add to…',
-      onSelected: (action) {
-        final cur = storage.tryGet(showId);
-        if (cur == null) return;
-
-        switch (action) {
-          case _AddAction.addWatchlist:
-            if (!inWatchlist) {
-              // Move to Watchlist and clear any Completed status/progress rules handled in storage layer
-              storage.toggleWatchlist(cur); // none ↔ watchlist
-            }
-            break;
-
-          case _AddAction.removeWatchlist:
-            if (inWatchlist) {
-              storage.toggleWatchlist(cur); // watchlist → none
-            }
-            break;
-
-          case _AddAction.markCompleted:
-            if (!isCompleted) {
-              storage
-                  .markCompleted(cur); // sets flag completed + fills progress
-            }
-            break;
-
-          case _AddAction.removeCompleted:
-            if (isCompleted) {
-              // Reset completely: clear flag & progress, keep detail visible
-              final reset = cur.copyWith(
-                flag: WatchFlag.none,
-                seasons: [
-                  for (final ss in cur.seasons) ss.copyWith(watched: 0)
-                ],
-              );
-              // Preserve list position: update in place instead of remove+re-add
-              storage.updateShow(reset);
-            }
-            break;
-        }
-        onChanged();
-      },
-      itemBuilder: (context) => <PopupMenuEntry<_AddAction>>[
-        if (!inWatchlist)
-          const PopupMenuItem(
-            value: _AddAction.addWatchlist,
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.bookmark_add_outlined),
-              title: Text('Add to Watchlist'),
-            ),
-          )
-        else
-          const PopupMenuItem(
-            value: _AddAction.removeWatchlist,
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.bookmark_remove_outlined),
-              title: Text('Remove from Watchlist'),
-            ),
-          ),
-        const PopupMenuDivider(),
-        if (!isCompleted)
-          const PopupMenuItem(
-            value: _AddAction.markCompleted,
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.check_circle_outline),
-              title: Text('Mark Completed'),
-            ),
-          )
-        else
-          const PopupMenuItem(
-            value: _AddAction.removeCompleted,
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.remove_circle_outline),
-              title: Text('Remove from Completed'),
-            ),
-          ),
-      ],
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: bg,
-              border: bg == null ? Border.all(color: Colors.white24) : null,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 26, color: fg),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-enum _AddAction {
-  addWatchlist,
-  removeWatchlist,
-  markCompleted,
-  removeCompleted,
-}
 
 class _SeasonTile extends StatelessWidget {
   const _SeasonTile({
