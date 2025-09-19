@@ -221,12 +221,21 @@ class _SyncConnectPageState extends State<SyncConnectPage> {
           // Connection summary (moved from Home)
           if (connected) ...[
             Builder(builder: (context) {
-              final color = switch (sync.state) {
-                SyncFileState.disconnected => Colors.white54,
-                SyncFileState.idle => Colors.lightGreenAccent,
-                SyncFileState.syncing => Colors.amberAccent,
-                SyncFileState.error => Colors.redAccent,
-              };
+              Color color;
+              switch (sync.state) {
+                case SyncFileState.disconnected:
+                  color = Colors.white54;
+                  break;
+                case SyncFileState.idle:
+                  color = Colors.lightGreenAccent;
+                  break;
+                case SyncFileState.syncing:
+                  color = Colors.amberAccent;
+                  break;
+                case SyncFileState.error:
+                  color = Colors.redAccent;
+                  break;
+              }
               final host = sync.endpointHost ?? (isDrive ? 'Google Drive' : '');
               final last = sync.lastSyncAt;
               String lastStr = '';

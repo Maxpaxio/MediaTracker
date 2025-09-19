@@ -85,12 +85,21 @@ class _FilmsPageState extends State<FilmsPage> {
         actions: [
           Builder(builder: (context) {
             final sync = SyncScope.of(context);
-            final color = switch (sync.state) {
-              SyncFileState.disconnected => Colors.white54,
-              SyncFileState.idle => Colors.lightGreenAccent,
-              SyncFileState.syncing => Colors.amberAccent,
-              SyncFileState.error => Colors.redAccent,
-            };
+            Color color;
+            switch (sync.state) {
+              case SyncFileState.disconnected:
+                color = Colors.white54;
+                break;
+              case SyncFileState.idle:
+                color = Colors.lightGreenAccent;
+                break;
+              case SyncFileState.syncing:
+                color = Colors.amberAccent;
+                break;
+              case SyncFileState.error:
+                color = Colors.redAccent;
+                break;
+            }
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Icon(Icons.circle, size: 10, color: color),
@@ -260,15 +269,12 @@ class _FilmsPageState extends State<FilmsPage> {
                   ),
                   onTap: () async {
                     final id = await search.ensureDetailInStorage(storage, s);
-                    // Navigate to unified details page
-                    if (context.mounted) {
-                      await Navigator.pushNamed(
-                        context,
-                        ShowDetailPage.route,
-                        arguments: ShowDetailArgs(showId: id),
-                      );
-                      // No need to refresh here; detail page updates storage
-                    }
+                    await Navigator.pushNamed(
+                      context,
+                      ShowDetailPage.route,
+                      arguments: ShowDetailArgs(showId: id),
+                    );
+                    // No need to refresh here; detail page updates storage
                   },
                   trailing: _PillActions(
                     inWatchlist: inWatchlist,

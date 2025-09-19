@@ -88,12 +88,21 @@ class _MediaHomePageState extends State<MediaHomePage> {
         actions: [
           Builder(builder: (context) {
             final sync = SyncScope.of(context);
-            final color = switch (sync.state) {
-              SyncFileState.disconnected => Colors.white54,
-              SyncFileState.idle => Colors.lightGreenAccent,
-              SyncFileState.syncing => Colors.amberAccent,
-              SyncFileState.error => Colors.redAccent,
-            };
+            Color color;
+            switch (sync.state) {
+              case SyncFileState.disconnected:
+                color = Colors.white54;
+                break;
+              case SyncFileState.idle:
+                color = Colors.lightGreenAccent;
+                break;
+              case SyncFileState.syncing:
+                color = Colors.amberAccent;
+                break;
+              case SyncFileState.error:
+                color = Colors.redAccent;
+                break;
+            }
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Icon(Icons.circle, size: 10, color: color),
@@ -172,72 +181,115 @@ class _MediaHomePageState extends State<MediaHomePage> {
           ),
         ),
       ),
-  body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: ListView(
-            shrinkWrap: true,
-            primary: false,
-            padding: const EdgeInsets.all(16),
-            children: [
-              const SizedBox(height: 8),
-              TextField(
-                focusNode: _focus,
-                controller: search.text,
-                onChanged: search.onChanged,
-                onSubmitted: search.onChanged,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Search movies, TV shows, and people…',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: hasQuery
-                      ? IconButton(
-                          icon: const Icon(Icons.close),
-                          tooltip: 'Clear',
-                          onPressed: () {
-                            search.clear();
-                            _focus.requestFocus();
-                          },
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        Navigator.pushReplacementNamed(context, HomePage.route),
-                    icon: const Icon(Icons.live_tv),
-                    label: const Text('TV'),
+      body: CustomScrollView(
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _HomeSearchHeaderDelegate(
+              minExtentHeight: 88,
+              maxExtentHeight: 88,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Material(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      child: TextField(
+                        focusNode: _focus,
+                        controller: search.text,
+                        onChanged: search.onChanged,
+                        onSubmitted: search.onChanged,
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Search movies, TV shows, and people…',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: hasQuery
+                              ? IconButton(
+                                  icon: const Icon(Icons.close),
+                                  tooltip: 'Clear',
+                                  onPressed: () {
+                                    search.clear();
+                                    _focus.requestFocus();
+                                  },
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        Navigator.pushNamed(context, FilmsPage.route),
-                    icon: const Icon(Icons.movie),
-                    label: const Text('Films'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (hasQuery)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: search.searching
-                      ? const Center(
-                          child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: CircularProgressIndicator(),
-                        ))
-                      : _MultiSearchResults(search: search, onOpen: _openShow),
-                ),
-              if (!hasQuery) const SizedBox(height: 24),
-            ],
+                )),
+            ),
           ),
-        ),
+
+          // Nav buttons row
+          SliverToBoxAdapter(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.pushReplacementNamed(context, HomePage.route),
+                        icon: const Icon(Icons.live_tv),
+                        label: const Text('TV'),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.pushNamed(context, FilmsPage.route),
+                        icon: const Icon(Icons.movie),
+                        label: const Text('Films'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Search results / placeholder
+          if (hasQuery && search.searching)
+            SliverToBoxAdapter(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              ),
+            ),
+
+          if (hasQuery && !search.searching)
+            SliverList.separated(
+              itemCount: search.results.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Builder(
+                        builder: (_) => _MultiSearchItem(index: i, search: search, onOpen: _openShow),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+
+          if (!hasQuery)
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        ],
       ),
     bottomNavigationBar: SafeArea(
         top: false,
@@ -250,127 +302,145 @@ class _MediaHomePageState extends State<MediaHomePage> {
   }
 }
 
-class _MultiSearchResults extends StatelessWidget {
-  const _MultiSearchResults({required this.search, required this.onOpen});
+class _HomeSearchHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _HomeSearchHeaderDelegate({
+    required this.child,
+    required this.minExtentHeight,
+    required this.maxExtentHeight,
+  });
+  final Widget child;
+  final double minExtentHeight;
+  final double maxExtentHeight;
+
+  @override
+  double get minExtent => minExtentHeight;
+
+  @override
+  double get maxExtent => maxExtentHeight;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return SizedBox(
+      height: maxExtent,
+      child: Container(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _HomeSearchHeaderDelegate oldDelegate) {
+    return oldDelegate.child != child ||
+        oldDelegate.minExtentHeight != minExtentHeight ||
+        oldDelegate.maxExtentHeight != maxExtentHeight;
+  }
+}
+
+// (Old _MultiSearchResults removed; SliverList now used)
+
+// Single list item builder used by the SliverList above
+class _MultiSearchItem extends StatelessWidget {
+  const _MultiSearchItem({required this.index, required this.search, required this.onOpen});
+  final int index;
   final MultiSearchController search;
   final Future<void> Function(Show) onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: search.results.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) {
-        final item = search.results[i];
-        switch (item.kind) {
-          case MultiKind.tv:
-          case MultiKind.movie:
-            final s = item.show!;
-            final storage = StorageScope.of(context);
-            final existing = storage.tryGet(s.id);
-            final inWatchlist = existing?.isWatchlist ?? false;
-            final isCompleted = existing?.isCompleted ?? false;
-      final isOngoing = existing != null &&
-        !existing.isCompleted &&
-        !existing.isWatchlist &&
-        existing.watchedEpisodes > 0;
-            final subtitle = s.firstAirDate.isNotEmpty
-                ? (s.mediaType == MediaType.movie
-                    ? 'Released: ${s.firstAirDate}'
-                    : 'First aired: ${s.firstAirDate}')
-                : '—';
+    final item = search.results[index];
+    switch (item.kind) {
+      case MultiKind.tv:
+      case MultiKind.movie:
+        final s = item.show!;
+        final storage = StorageScope.of(context);
+        final existing = storage.tryGet(s.id);
+        final inWatchlist = existing?.isWatchlist ?? false;
+        final isCompleted = existing?.isCompleted ?? false;
+        final isOngoing = existing != null &&
+            !existing.isCompleted &&
+            !existing.isWatchlist &&
+            existing.watchedEpisodes > 0;
+        final subtitle = s.firstAirDate.isNotEmpty
+            ? (s.mediaType == MediaType.movie
+                ? 'Released: ${s.firstAirDate}'
+                : 'First aired: ${s.firstAirDate}')
+            : '—';
 
-            return ListTile(
-              onTap: () => onOpen(s),
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: AspectRatio(
-                  aspectRatio: 2 / 3,
-                  child: s.posterUrl.isNotEmpty
-                      ? Image.network(s.posterUrl, fit: BoxFit.cover)
-                      : Container(
-                          color: const Color(0xFF2C2C32),
-                          child: const Icon(Icons.broken_image)),
+        return ListTile(
+          onTap: () => onOpen(s),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: AspectRatio(
+              aspectRatio: 2 / 3,
+              child: s.posterUrl.isNotEmpty
+                  ? Image.network(s.posterUrl, fit: BoxFit.cover)
+                  : Container(color: const Color(0xFF2C2C32), child: const Icon(Icons.broken_image)),
+            ),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  s.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      s.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    s.mediaType == MediaType.movie
-                        ? Icons.movie
-                        : Icons.live_tv,
-                    size: 16,
-                    color: Colors.white70,
-                  ),
-                ],
-              ),
-              subtitle: Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-      trailing: _AddToPill(
-                    inWatchlist: inWatchlist,
-                    isCompleted: isCompleted,
-        isOngoing: isOngoing,
-                    onAddWatchlist: () async {
-                      final id = await search.ensureDetailInStorage(storage, s);
-                      storage.toggleWatchlist(storage.byId(id));
-                    },
-                    onRemoveWatchlist: () {
-                      if (!storage.exists(s.id)) return;
-                      storage.removeFromWatchlist(s.id);
-                    },
-                    onAddCompleted: () async {
-                      final id = await search.ensureDetailInStorage(storage, s);
-                      storage.markCompleted(storage.byId(id));
-                    },
-                    onRemoveCompleted: () {
-                      if (!storage.exists(s.id)) return;
-                      storage.removeFromCompleted(s.id);
-                    },
-      ),
-            );
+              const SizedBox(width: 6),
+              Icon(s.mediaType == MediaType.movie ? Icons.movie : Icons.live_tv, size: 16, color: Colors.white70),
+            ],
+          ),
+          subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: _AddToPill(
+            inWatchlist: inWatchlist,
+            isCompleted: isCompleted,
+            isOngoing: isOngoing,
+            onAddWatchlist: () async {
+              final id = await _ensureDetailInStorage(context, search, s);
+              StorageScope.of(context).toggleWatchlist(StorageScope.of(context).byId(id));
+            },
+            onRemoveWatchlist: () {
+              if (!StorageScope.of(context).exists(s.id)) return;
+              StorageScope.of(context).removeFromWatchlist(s.id);
+            },
+            onAddCompleted: () async {
+              final id = await _ensureDetailInStorage(context, search, s);
+              StorageScope.of(context).markCompleted(StorageScope.of(context).byId(id));
+            },
+            onRemoveCompleted: () {
+              if (!StorageScope.of(context).exists(s.id)) return;
+              StorageScope.of(context).removeFromCompleted(s.id);
+            },
+          ),
+        );
 
-          case MultiKind.person:
-            final name = item.personName ?? '';
-            final profile = item.personProfileUrl;
-            final knownFor =
-                (item.knownForTitles ?? const []).take(3).join(' • ');
-            return ListTile(
-              onTap: () => Navigator.pushNamed(
-                context,
-                PersonCreditsPage.route,
-                arguments: item.personId,
-              ),
-              leading: CircleAvatar(
-                radius: 24,
-                backgroundColor: const Color(0xFF2C2C32),
-                backgroundImage: profile != null ? NetworkImage(profile) : null,
-                child: profile == null ? const Icon(Icons.person) : null,
-              ),
-              titleTextStyle: Theme.of(context).textTheme.titleMedium,
-              title: Text(name),
-              subtitle: Text(
-                knownFor.isNotEmpty ? knownFor : 'Person',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: const Icon(Icons.person, color: Colors.white70),
-            );
-        }
-      },
-    );
+      case MultiKind.person:
+        final name = item.personName ?? '';
+        final profile = item.personProfileUrl;
+        final knownFor = (item.knownForTitles ?? const []).take(3).join(' • ');
+        return ListTile(
+          onTap: () => Navigator.pushNamed(
+            context,
+            PersonCreditsPage.route,
+            arguments: item.personId,
+          ),
+          leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: const Color(0xFF2C2C32),
+            backgroundImage: profile != null ? NetworkImage(profile) : null,
+            child: profile == null ? const Icon(Icons.person) : null,
+          ),
+          titleTextStyle: Theme.of(context).textTheme.titleMedium,
+          title: Text(name),
+          subtitle: Text(knownFor.isNotEmpty ? knownFor : 'Person', maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: const Icon(Icons.person, color: Colors.white70),
+        );
+    }
+  }
+
+  Future<int> _ensureDetailInStorage(BuildContext context, MultiSearchController search, Show s) {
+    return search.ensureDetailInStorage(StorageScope.of(context), s);
   }
 }
 

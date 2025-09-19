@@ -96,15 +96,7 @@ class _HomePageState extends State<HomePage> {
     .where((r) => r.kind != MultiKind.person)
     .toList(growable: false);
 
-    return PopScope(
-      canPop: !hasQuery,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        if (hasQuery) {
-          multiSearch.clear();
-        }
-      },
-      child: Scaffold(
+    return Scaffold(
         appBar: AppBar(
           flexibleSpace: Container(
             decoration: const BoxDecoration(
@@ -137,12 +129,21 @@ class _HomePageState extends State<HomePage> {
           actions: [
             Builder(builder: (context) {
               final sync = SyncScope.of(context);
-              final color = switch (sync.state) {
-                SyncFileState.disconnected => Colors.white54,
-                SyncFileState.idle => Colors.lightGreenAccent,
-                SyncFileState.syncing => Colors.amberAccent,
-                SyncFileState.error => Colors.redAccent,
-              };
+              Color color;
+              switch (sync.state) {
+                case SyncFileState.disconnected:
+                  color = Colors.white54;
+                  break;
+                case SyncFileState.idle:
+                  color = Colors.lightGreenAccent;
+                  break;
+                case SyncFileState.syncing:
+                  color = Colors.amberAccent;
+                  break;
+                case SyncFileState.error:
+                  color = Colors.redAccent;
+                  break;
+              }
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Icon(Icons.circle, size: 10, color: color),
@@ -441,8 +442,7 @@ class _HomePageState extends State<HomePage> {
         ),
   // No TMDb footer here; attribution is shown on Home and Settings only.
   bottomNavigationBar: null,
-      ),
-    );
+      );
   }
 }
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -50,6 +49,8 @@ class StatsController extends ChangeNotifier {
   Timer? _debounce;
   bool _loading = false;
   bool get loading => _loading;
+  bool _updating = false;
+  bool get updating => _updating;
 
   StatsSnapshot _snapshot = StatsSnapshot.empty;
   StatsSnapshot get snapshot => _snapshot;
@@ -122,8 +123,8 @@ class StatsController extends ChangeNotifier {
   }
 
   Future<void> _compute({required bool backgroundFetch}) async {
-    _loading = true;
-    notifyListeners();
+  _loading = true;
+  notifyListeners();
 
     int movieMinutes = 0;
     int completedMovies = 0;
@@ -193,14 +194,20 @@ class StatsController extends ChangeNotifier {
       return;
     }
 
+    // Indicate background updating while fetching precise runtimes
+    _updating = true;
+    notifyListeners();
+
     // Fetch everything in parallel; errors ignored.
     try {
       await Future.wait(fetches.map((f) => f.catchError((_) {})));
     } catch (_) {}
 
     // After fetches, persist caches and recompute for a refined snapshot
-    _saveCaches();
-    await _recomputeFromCache();
+  _saveCaches();
+  await _recomputeFromCache();
+  _updating = false;
+  notifyListeners();
   }
 
   Future<void> _recomputeFromCache() async {

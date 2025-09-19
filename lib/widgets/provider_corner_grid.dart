@@ -129,11 +129,19 @@ class _ProviderCornerGridState extends State<ProviderCornerGrid> {
       _allStreaming = streaming;
       _rentBuy = rentBuy;
       _hasRentBuy = _rentBuy.isNotEmpty;
-      final displayingStreaming = _allStreaming.isNotEmpty || !_hasRentBuy;
-      final displayedList = displayingStreaming ? _allStreaming : _rentBuy;
-      _streaming = displayedList.take(3).toList(growable: false);
-      final otherExists = displayingStreaming ? _hasRentBuy : _allStreaming.isNotEmpty;
-      _showEllipsis = displayedList.length > 3 || otherExists;
+      // Posters rule: if there are only Rent/Buy options (no streaming),
+      // do not render provider logos on the poster. Show only the ellipsis
+      // badge so users can open the providers sheet with alternatives.
+      if (_allStreaming.isEmpty && _hasRentBuy) {
+        _streaming = const [];
+        _showEllipsis = true; // show … to access the sheet
+      } else {
+        final displayingStreaming = _allStreaming.isNotEmpty || !_hasRentBuy;
+        final displayedList = displayingStreaming ? _allStreaming : _rentBuy;
+        _streaming = displayedList.take(3).toList(growable: false);
+        final otherExists = displayingStreaming ? _hasRentBuy : _allStreaming.isNotEmpty;
+        _showEllipsis = displayedList.length > 3 || otherExists;
+      }
       _loading = false;
       _regionUsed = usedRegion;
       _error = false;

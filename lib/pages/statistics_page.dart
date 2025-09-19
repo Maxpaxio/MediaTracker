@@ -89,9 +89,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
     const int secondsPerYear = 365 * secondsPerDay; // 365-day year
 
     int rem = totalSeconds;
-    String joinNonZero(List<(int, String)> parts) {
+    String joinNonZero(List<MapEntry<int, String>> parts) {
       final buf = <String>[];
-      for (final (v, label) in parts) {
+      for (final entry in parts) {
+        final v = entry.key;
+        final label = entry.value;
         if (v > 0) buf.add('$v $label');
       }
       return buf.isEmpty ? '0 minutes' : buf.join(', ');
@@ -116,9 +118,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final h = rem ~/ secondsPerHour; rem %= secondsPerHour;
         final m = rem ~/ secondsPerMinute;
         return joinNonZero([
-          (d, 'days'),
-          (h, 'hours'),
-          (m, 'minutes'),
+          MapEntry(d, 'days'),
+          MapEntry(h, 'hours'),
+          MapEntry(m, 'minutes'),
         ]);
       case TimeBreakdown.monthsDaysHoursMinutes:
         final mo = rem ~/ secondsPerMonth; rem %= secondsPerMonth;
@@ -126,10 +128,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final h = rem ~/ secondsPerHour; rem %= secondsPerHour;
         final m = rem ~/ secondsPerMinute;
         return joinNonZero([
-          (mo, 'months'),
-          (d, 'days'),
-          (h, 'hours'),
-          (m, 'minutes'),
+          MapEntry(mo, 'months'),
+          MapEntry(d, 'days'),
+          MapEntry(h, 'hours'),
+          MapEntry(m, 'minutes'),
         ]);
       case TimeBreakdown.yearsMonthsDaysHoursMinutes:
         final y = rem ~/ secondsPerYear; rem %= secondsPerYear;
@@ -138,11 +140,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final h = rem ~/ secondsPerHour; rem %= secondsPerHour;
         final m = rem ~/ secondsPerMinute; rem %= secondsPerMinute;
         return joinNonZero([
-          (y, 'years'),
-          (mo, 'months'),
-          (d, 'days'),
-          (h, 'hours'),
-          (m, 'minutes'),
+          MapEntry(y, 'years'),
+          MapEntry(mo, 'months'),
+          MapEntry(d, 'days'),
+          MapEntry(h, 'hours'),
+          MapEntry(m, 'minutes'),
         ]);
     }
   }
