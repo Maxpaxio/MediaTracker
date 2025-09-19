@@ -5,35 +5,50 @@
 			"label": "flutter pub get + analyze",
 			"type": "shell",
 			"command": "C:\\flutter\\bin\\flutter.bat",
-			"args": ["pub","get"],
+			"args": [
+				"pub",
+				"get"
+			],
 			"problemMatcher": []
 		},
 		{
 			"label": "flutter analyze lib",
 			"type": "shell",
 			"command": "C:\\flutter\\bin\\flutter.bat",
-			"args": ["analyze","lib"],
+			"args": [
+				"analyze",
+				"lib"
+			],
 			"problemMatcher": []
 		},
 		{
 			"label": "flutter analyze lib (2)",
 			"type": "shell",
 			"command": "C:\\flutter\\bin\\flutter.bat",
-			"args": ["analyze","lib"],
+			"args": [
+				"analyze",
+				"lib"
+			],
 			"problemMatcher": []
 		},
 		{
 			"label": "flutter analyze lib (post-fix)",
 			"type": "shell",
 			"command": "C:\\flutter\\bin\\flutter.bat",
-			"args": ["analyze","lib"],
+			"args": [
+				"analyze",
+				"lib"
+			],
 			"problemMatcher": []
 		},
 		{
 			"label": "flutter build web",
 			"type": "shell",
 			"command": "C:\\flutter\\bin\\flutter.bat",
-			"args": ["build","web"],
+			"args": [
+				"build",
+				"web"
+			],
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
@@ -42,7 +57,11 @@
 			"label": "Run app in Chrome (web)",
 			"type": "shell",
 			"command": "C:\\flutter\\bin\\flutter.bat",
-			"args": ["run","-d","chrome"],
+			"args": [
+				"run",
+				"-d",
+				"chrome"
+			],
 			"isBackground": true,
 			"group": "build"
 		},
@@ -50,8 +69,28 @@
 			"label": "Serve Web on :8080",
 			"type": "shell",
 			"command": "C:\\flutter\\bin\\flutter.bat",
-			"args": ["run","-d","web-server","--web-hostname","0.0.0.0","--web-port","8080"],
+			"args": [
+				"run",
+				"-d",
+				"web-server",
+				"--web-hostname",
+				"0.0.0.0",
+				"--web-port",
+				"8080"
+			],
 			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "git commit + push stats format",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"git add -A; git commit -m \"Stats: compact time format (y/m/d/h/min) + stacked Films/TV layout\"; git push origin main"
+			],
+			"isBackground": false,
 			"group": "build"
 		}
 	]

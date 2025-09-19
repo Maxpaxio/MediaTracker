@@ -94,9 +94,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
       for (final entry in parts) {
         final v = entry.key;
         final label = entry.value;
-        if (v > 0) buf.add('$v $label');
+        if (v > 0) buf.add('$v$label');
       }
-      return buf.isEmpty ? '0 minutes' : buf.join(', ');
+      return buf.isEmpty ? '0m' : buf.join(' ');
     }
 
     switch (_breakdown) {
@@ -105,22 +105,22 @@ class _StatisticsPageState extends State<StatisticsPage> {
         return '${s}s';
       case TimeBreakdown.minutes:
         final m = rem ~/ secondsPerMinute;
-        return '${m}m';
+        return '${m}min';
       case TimeBreakdown.hoursMinutes:
         final h = rem ~/ secondsPerHour;
         rem %= secondsPerHour;
-        final m = rem ~/ secondsPerMinute;
-        if (h == 0) return '${m}m';
+  final m = rem ~/ secondsPerMinute;
+  if (h == 0) return '${m}min';
         if (m == 0) return '${h}h';
-        return '${h}h ${m}m';
+  return '${h}h ${m}min';
       case TimeBreakdown.daysHoursMinutes:
         final d = rem ~/ secondsPerDay; rem %= secondsPerDay;
         final h = rem ~/ secondsPerHour; rem %= secondsPerHour;
         final m = rem ~/ secondsPerMinute;
         return joinNonZero([
-          MapEntry(d, 'days'),
-          MapEntry(h, 'hours'),
-          MapEntry(m, 'minutes'),
+          MapEntry(d, 'd'),
+          MapEntry(h, 'h'),
+          MapEntry(m, 'min'),
         ]);
       case TimeBreakdown.monthsDaysHoursMinutes:
         final mo = rem ~/ secondsPerMonth; rem %= secondsPerMonth;
@@ -128,10 +128,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final h = rem ~/ secondsPerHour; rem %= secondsPerHour;
         final m = rem ~/ secondsPerMinute;
         return joinNonZero([
-          MapEntry(mo, 'months'),
-          MapEntry(d, 'days'),
-          MapEntry(h, 'hours'),
-          MapEntry(m, 'minutes'),
+          MapEntry(mo, 'm'),
+          MapEntry(d, 'd'),
+          MapEntry(h, 'h'),
+          MapEntry(m, 'min'),
         ]);
       case TimeBreakdown.yearsMonthsDaysHoursMinutes:
         final y = rem ~/ secondsPerYear; rem %= secondsPerYear;
@@ -140,13 +140,42 @@ class _StatisticsPageState extends State<StatisticsPage> {
         final h = rem ~/ secondsPerHour; rem %= secondsPerHour;
         final m = rem ~/ secondsPerMinute; rem %= secondsPerMinute;
         return joinNonZero([
-          MapEntry(y, 'years'),
-          MapEntry(mo, 'months'),
-          MapEntry(d, 'days'),
-          MapEntry(h, 'hours'),
-          MapEntry(m, 'minutes'),
+          MapEntry(y, 'y'),
+          MapEntry(mo, 'm'),
+          MapEntry(d, 'd'),
+          MapEntry(h, 'h'),
+          MapEntry(m, 'min'),
         ]);
     }
+  }
+
+  // Stacked short format for Films/TV trailing, matching requested style:
+  // y on one line, m on next, d on next, and final line shows "h min".
+  String _formatStackedYMDHmin(int minutes) {
+    const int minutesPerHour = 60;
+    const int minutesPerDay = 24 * minutesPerHour;
+    const int minutesPerMonth = 30 * minutesPerDay; // ~
+    const int minutesPerYear = 365 * minutesPerDay;
+
+    int rem = minutes;
+    final y = rem ~/ minutesPerYear; rem %= minutesPerYear;
+    final mo = rem ~/ minutesPerMonth; rem %= minutesPerMonth;
+    final d = rem ~/ minutesPerDay; rem %= minutesPerDay;
+    final h = rem ~/ minutesPerHour; rem %= minutesPerHour;
+    final m = rem;
+
+    final lines = <String>[];
+    if (y > 0) lines.add('${y}y');
+    if (mo > 0) lines.add('${mo}m');
+    if (d > 0) lines.add('${d}d');
+    // Always show the last line as hours + minutes (minutes shortened to 'min')
+    final last = (h > 0 && m > 0)
+        ? '${h}h ${m}min'
+        : (h > 0)
+            ? '${h}h'
+            : '${m}min';
+    lines.add(last);
+    return lines.join('\n');
   }
 
   @override
@@ -347,11 +376,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   title: const Text('Films'),
                   subtitle: Text('${data.completedMovies} completed'),
                   trailing: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 180),
+                    constraints: const BoxConstraints(maxWidth: 80),
                     child: Text(
-                      _formatByBreakdown(data.movieMinutes),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      _formatStackedYMDHmin(data.movieMinutes),
                       textAlign: TextAlign.right,
                     ),
                   ),
@@ -364,11 +391,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   title: const Text('TV'),
                   subtitle: Text('${data.watchedEpisodes} episodes watched'),
                   trailing: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 180),
+                    constraints: const BoxConstraints(maxWidth: 80),
                     child: Text(
-                      _formatByBreakdown(data.tvMinutes),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      _formatStackedYMDHmin(data.tvMinutes),
                       textAlign: TextAlign.right,
                     ),
                   ),
