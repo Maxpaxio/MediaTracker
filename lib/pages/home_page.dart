@@ -91,7 +91,10 @@ class _HomePageState extends State<HomePage> {
         .reversed
         .toList();
 
-    final hasQuery = multiSearch.text.text.isNotEmpty;
+  final hasQuery = multiSearch.text.text.isNotEmpty;
+  final filteredResults = multiSearch.results
+    .where((r) => r.kind != MultiKind.person)
+    .toList(growable: false);
 
     return PopScope(
       canPop: !hasQuery,
@@ -219,29 +222,49 @@ class _HomePageState extends State<HomePage> {
         ),
         body: CustomScrollView(
           slivers: [
-            // Search bar always on top
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: TextField(
-                  focusNode: _searchFocus,
-                  controller: multiSearch.text,
-                  onChanged: multiSearch.onChanged,
-                  onSubmitted: multiSearch.onChanged,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search TV shows…',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: hasQuery
-                        ? IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              multiSearch.clear();
-                              _searchFocus.requestFocus();
-                            },
-                            tooltip: 'Clear',
-                          )
-                        : null,
+            // Pinned search bar header (using SliverAppBar for robustness on Web)
+            SliverAppBar(
+              pinned: true,
+              automaticallyImplyLeading: false,
+              toolbarHeight: 88,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+              flexibleSpace: SafeArea(
+                bottom: false,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: TextField(
+                          focusNode: _searchFocus,
+                          controller: multiSearch.text,
+                          onChanged: multiSearch.onChanged,
+                          onSubmitted: multiSearch.onChanged,
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            hintText: 'Search TV shows…',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: hasQuery
+                                ? IconButton(
+                                    icon: const Icon(Icons.close),
+                                    onPressed: () {
+                                      multiSearch.clear();
+                                      _searchFocus.requestFocus();
+                                    },
+                                    tooltip: 'Clear',
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -263,30 +286,45 @@ class _HomePageState extends State<HomePage> {
 
             // Results directly under the search bar
             if (hasQuery && !multiSearch.searching)
-              SliverList.separated(
-                itemCount: multiSearch.results
-                    .where((r) => r.kind != MultiKind.person)
-                    .length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (_, i) {
-                  final list = multiSearch.results
-                      .where((r) => r.kind != MultiKind.person)
-                      .toList();
-                  final item = list[i];
-                  switch (item.kind) {
-                    case MultiKind.tv:
-                    case MultiKind.movie:
-                      final show = item.show!;
-                      return _SearchRow(
-                        show: show,
-                        search: ShowsSearchControllerAdapter(multiSearch),
-                        onOpen: () => _openShow(show),
-                      );
-                    case MultiKind.person:
-                      // Excluded on TV page
-                      return const SizedBox.shrink();
-                  }
-                },
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) {
+                    final item = filteredResults[i];
+                    Widget row;
+                    switch (item.kind) {
+                      case MultiKind.tv:
+                      case MultiKind.movie:
+                        final show = item.show!;
+                        row = Align(
+                          alignment: Alignment.topCenter,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 720),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: _SearchRow(
+                                show: show,
+                                search: ShowsSearchControllerAdapter(multiSearch),
+                                onOpen: () => _openShow(show),
+                              ),
+                            ),
+                          ),
+                        );
+                        break;
+                      case MultiKind.person:
+                        row = const SizedBox.shrink();
+                        break;
+                    }
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        row,
+                        if (i < filteredResults.length - 1)
+                          const Divider(height: 1),
+                      ],
+                    );
+                  },
+                  childCount: filteredResults.length,
+                ),
               ),
 
             // Shelves when not searching
@@ -409,6 +447,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
+
+// Removed old _SearchHeaderDelegate; SliverAppBar is used instead for the pinned search header.
 
 /// Wide ongoing card: poster left, title + provider right column, progress lines below.
 class _OngoingCardWide extends StatelessWidget {

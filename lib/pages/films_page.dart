@@ -50,7 +50,7 @@ class _FilmsPageState extends State<FilmsPage> {
     final completed = storage.completed.where((s) => s.mediaType == MediaType.movie).toList().reversed.toList();
     final watchlist = storage.watchlist.where((s) => s.mediaType == MediaType.movie).toList().reversed.toList();
 
-    final hasQuery = search.text.text.isNotEmpty;
+  final hasQuery = search.text.text.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -165,29 +165,49 @@ class _FilmsPageState extends State<FilmsPage> {
       ),
       body: CustomScrollView(
         slivers: [
-          // Film-only search bar
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: TextField(
-                focusNode: _searchFocus,
-                controller: search.text,
-                onChanged: search.onChanged,
-                onSubmitted: search.onChanged,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Search films…',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: hasQuery
-                      ? IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () {
-                            search.clear();
-                            _searchFocus.requestFocus();
-                          },
-                          tooltip: 'Clear',
-                        )
-                      : null,
+          // Pinned film search bar (SliverAppBar for robustness)
+          SliverAppBar(
+            pinned: true,
+            automaticallyImplyLeading: false,
+            toolbarHeight: 88,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            flexibleSpace: SafeArea(
+              bottom: false,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: TextField(
+                        focusNode: _searchFocus,
+                        controller: search.text,
+                        onChanged: search.onChanged,
+                        onSubmitted: search.onChanged,
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Search films…',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: hasQuery
+                              ? IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () {
+                                    search.clear();
+                                    _searchFocus.requestFocus();
+                                  },
+                                  tooltip: 'Clear',
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -207,15 +227,17 @@ class _FilmsPageState extends State<FilmsPage> {
             ),
 
           if (hasQuery && !search.searching)
-            SliverList.separated(
-              itemCount: search.results.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final s = search.results[i];
-                final existing = storage.tryGet(s.id);
-                final inWatchlist = existing?.isWatchlist ?? false;
-                final isCompleted = existing?.isCompleted ?? false;
-                return ListTile(
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final s = search.results[i];
+                  final existing = storage.tryGet(s.id);
+                  final inWatchlist = existing?.isWatchlist ?? false;
+                  final isCompleted = existing?.isCompleted ?? false;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   leading: ClipRRect(
@@ -270,9 +292,18 @@ class _FilmsPageState extends State<FilmsPage> {
                       storage.removeFromCompleted(s.id);
                     },
                   ),
-                );
-              },
+                      ),
+                      if (i < search.results.length - 1)
+                        const Divider(height: 1),
+                    ],
+                  );
+                },
+                childCount: search.results.length,
+              ),
             ),
+
+          if (!hasQuery)
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
           if (!hasQuery) ...[
             // Completed movies row (horizontal like TV page) + See all
@@ -480,3 +511,5 @@ class _PillActions extends StatelessWidget {
     );
   }
 }
+
+// Removed old _FilmsSearchHeaderDelegate; SliverAppBar is used instead for the pinned search header.

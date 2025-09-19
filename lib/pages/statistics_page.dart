@@ -178,6 +178,27 @@ class _StatisticsPageState extends State<StatisticsPage> {
           ],
         ),
         actions: [
+          Builder(builder: (context) {
+            final stats = StatsScope.of(context);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: stats.updating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const SizedBox(width: 18, height: 18),
+            );
+          }),
+          IconButton(
+            tooltip: 'Refresh statistics',
+            onPressed: () async {
+              final stats = StatsScope.of(context);
+              await stats.refreshNow();
+            },
+            icon: const Icon(Icons.refresh),
+          ),
           PopupMenuButton<TimeBreakdown>(
             tooltip: 'Time format',
             initialValue: _breakdown,
@@ -290,12 +311,18 @@ class _StatisticsPageState extends State<StatisticsPage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(
-                            _formatByBreakdown(data.totalMinutes),
-                            style: const TextStyle(
-                              fontSize: 40,
-                              fontWeight: FontWeight.w800,
-                              height: 1.0,
+                          // Make the big number adapt to narrow screens
+                          Expanded(
+                            child: Text(
+                              _formatByBreakdown(data.totalMinutes),
+                              maxLines: 2,
+                              softWrap: true,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.w800,
+                                height: 1.0,
+                              ),
                             ),
                           ),
                         ],
@@ -317,7 +344,15 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   leading: const Icon(Icons.movie),
                   title: const Text('Films'),
                   subtitle: Text('${data.completedMovies} completed'),
-                  trailing: Text(_formatByBreakdown(data.movieMinutes)),
+                  trailing: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(
+                      _formatByBreakdown(data.movieMinutes),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -326,7 +361,15 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   leading: const Icon(Icons.live_tv),
                   title: const Text('TV'),
                   subtitle: Text('${data.watchedEpisodes} episodes watched'),
-                  trailing: Text(_formatByBreakdown(data.tvMinutes)),
+                  trailing: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(
+                      _formatByBreakdown(data.tvMinutes),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
                 ),
               ),
             ],
