@@ -228,8 +228,6 @@ class _HomePageState extends State<HomePage> {
               automaticallyImplyLeading: false,
               toolbarHeight: 88,
               elevation: 0,
-              scrolledUnderElevation: 0,
-              surfaceTintColor: Colors.transparent,
               shadowColor: Colors.transparent,
               backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               flexibleSpace: SafeArea(
