@@ -41,6 +41,7 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
 
   final Map<int, bool> _expanded = {}; // seasonNumber -> expanded
   final Map<int, List<String>> _episodeTitles = {}; // seasonNumber -> titles
+  final Map<int, List<String>> _episodeAirDates = {}; // seasonNumber -> air dates
 
   @override
   void didChangeDependencies() {
@@ -289,6 +290,25 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     });
   }
 
+  Future<void> _ensureEpisodeAirDates(int seasonNumber, int expectedCount) async {
+    if (_showId == null) return;
+    if (_episodeAirDates.containsKey(seasonNumber)) return;
+
+    final dates = await _api.fetchSeasonEpisodeAirDates(_showId!, seasonNumber);
+    if (!mounted) return;
+
+    final fixed = List<String>.from(dates);
+    if (fixed.length > expectedCount) {
+      fixed.removeRange(expectedCount, fixed.length);
+    } else if (fixed.length < expectedCount) {
+      fixed.addAll(List.filled(expectedCount - fixed.length, ''));
+    }
+
+    setState(() {
+      _episodeAirDates[seasonNumber] = fixed;
+    });
+  }
+
   // --- Seasons helpers (tri-state) ---
   bool? _triStateFor(Season s) {
     if (s.episodeCount <= 0) return false;
@@ -297,9 +317,40 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     return null; // partial
   }
 
-  void _setSeasonWatched(Show show, Season season, bool watchedAll) {
+  Future<void> _setSeasonWatched(Show show, Season season, bool watchedAll) async {
     final storage = StorageScope.of(context);
-    final target = watchedAll ? season.episodeCount : 0;
+    int target = 0;
+    if (watchedAll) {
+      // Only allow up to aired episodes
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      List<String> dates = _episodeAirDates[season.seasonNumber] ?? const [];
+      if (dates.isEmpty) {
+        // fetch if missing
+        await _ensureEpisodeAirDates(season.seasonNumber, season.episodeCount);
+        dates = _episodeAirDates[season.seasonNumber] ?? const [];
+      }
+      int aired = 0;
+      for (final d in dates) {
+        if (d.isEmpty) { aired++; continue; }
+        final dt = DateTime.tryParse(d);
+        if (dt == null) { aired++; continue; }
+        final day = DateTime(dt.year, dt.month, dt.day);
+        if (!day.isAfter(today)) aired++;
+      }
+      if (aired <= 0) {
+        // fall back to season air date if provided
+        if (season.airDate.isNotEmpty) {
+          final sd = DateTime.tryParse(season.airDate);
+          if (sd != null && !DateTime(sd.year, sd.month, sd.day).isAfter(today)) {
+            aired = season.episodeCount; // assume all available when season date reached
+          }
+        }
+      }
+      target = aired.clamp(0, season.episodeCount);
+    } else {
+      target = 0;
+    }
 
     storage.updateSeasonProgress(show.id, season.seasonNumber, target);
 
@@ -461,9 +512,11 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
                       seasonTitle: season.name.isNotEmpty
                           ? season.name
                           : 'Season ${season.seasonNumber}',
+                      seasonAirDate: season.airDate,
                       initialExpanded: _expanded[season.seasonNumber] ?? false,
                       triStateValue: _triStateFor(season),
                       titles: _episodeTitles[season.seasonNumber],
+                      airDates: _episodeAirDates[season.seasonNumber],
                       onBulkChange: (v) =>
                           _setSeasonWatched(show, season, v == true),
                       onEpisodeToggle: (epNum, v) =>
@@ -472,6 +525,8 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
                         _expanded[season.seasonNumber] = isOpen;
                         if (isOpen) {
                           await _ensureEpisodeTitles(
+                              season.seasonNumber, season.episodeCount);
+                          await _ensureEpisodeAirDates(
                               season.seasonNumber, season.episodeCount);
                         }
                         if (mounted) setState(() {});
@@ -830,14 +885,18 @@ class _SeasonTile extends StatelessWidget {
     required this.onBulkChange,
     required this.onEpisodeToggle,
     required this.onToggle,
+    this.seasonAirDate,
+    this.airDates,
   });
 
   final Show show;
   final Season season;
   final String seasonTitle;
+  final String? seasonAirDate;
   final bool initialExpanded;
   final bool? triStateValue;
   final List<String>? titles;
+  final List<String>? airDates;
   final ValueChanged<bool?> onBulkChange;
   final void Function(int episodeNumber, bool newValue) onEpisodeToggle;
   final ValueChanged<bool> onToggle;
@@ -849,17 +908,48 @@ class _SeasonTile extends StatelessWidget {
       child: ExpansionTile(
         key: PageStorageKey('expansion-${show.id}-${season.seasonNumber}'),
         title: Text(seasonTitle),
-        subtitle: Text('Episodes: ${season.episodeCount}'),
+        subtitle: Builder(builder: (context) {
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final sd = (seasonAirDate != null && seasonAirDate!.isNotEmpty)
+              ? DateTime.tryParse(seasonAirDate!)
+              : null;
+          final seasonAired = sd != null &&
+              !DateTime(sd.year, sd.month, sd.day).isAfter(today);
+
+          String left;
+          if (!seasonAired) {
+            final when = (seasonAirDate != null && seasonAirDate!.isNotEmpty)
+                ? seasonAirDate!
+                : 'T.B.A.';
+            left = 'Available $when';
+          } else if (seasonAirDate != null && seasonAirDate!.isNotEmpty) {
+            left = seasonAirDate!;
+          } else {
+            left = '';
+          }
+          final prefix = left.isNotEmpty ? '$left • ' : '';
+          return Text('${prefix}Episodes: ${season.episodeCount}');
+        }),
         trailing: SizedBox(
           width: 28,
           height: 28,
-          child: Checkbox(
+          child: Builder(builder: (context) {
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final sd = (seasonAirDate != null && seasonAirDate!.isNotEmpty)
+                ? DateTime.tryParse(seasonAirDate!)
+                : null;
+      final seasonAired = sd != null &&
+        !DateTime(sd.year, sd.month, sd.day).isAfter(today);
+            return Checkbox(
             tristate: true,
             value: triStateValue,
-            onChanged: onBulkChange,
+              onChanged: seasonAired ? onBulkChange : null,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
-          ),
+            );
+          }),
         ),
         initiallyExpanded: initialExpanded,
         onExpansionChanged: onToggle,
@@ -868,6 +958,15 @@ class _SeasonTile extends StatelessWidget {
             const ListTile(title: Text('No episodes listed for this season.'))
           else
             ...List.generate(season.episodeCount, (idx) {
+              final now = DateTime.now();
+              final today = DateTime(now.year, now.month, now.day);
+              final seasonDate = (seasonAirDate != null && seasonAirDate!.isNotEmpty)
+                  ? DateTime.tryParse(seasonAirDate!)
+                  : null;
+              final seasonAired = seasonDate == null
+                  ? true
+                  : !DateTime(seasonDate.year, seasonDate.month, seasonDate.day)
+                      .isAfter(today);
               final epNum = idx + 1;
               final isChecked = epNum <= season.watched;
               final title = (titles != null &&
@@ -876,12 +975,33 @@ class _SeasonTile extends StatelessWidget {
                   ? titles![idx].trim()
                   : '';
               final line = title.isNotEmpty ? 'Ep $epNum: $title' : 'Ep $epNum';
+              // Episode-level air date gating
+              final epDateStr = (airDates != null && idx < airDates!.length)
+                  ? airDates![idx]
+                  : '';
+              final epDate = epDateStr.isNotEmpty
+                  ? DateTime.tryParse(epDateStr)
+                  : null;
+              final epAired = epDate != null &&
+                  !DateTime(epDate.year, epDate.month, epDate.day)
+                      .isAfter(today);
+              final enabled = seasonAired && epAired;
               return CheckboxListTile(
                 dense: true,
                 controlAffinity: ListTileControlAffinity.leading,
                 value: isChecked,
                 title: Text(line),
-                onChanged: (v) => onEpisodeToggle(epNum, v ?? false),
+                subtitle: () {
+                  // Show availability helper when episode isn't aired yet or T.B.A.
+                  if (!enabled) {
+                    final when = epDateStr.isNotEmpty ? epDateStr : 'T.B.A.';
+                    return Text('Available $when');
+                  }
+                  // Otherwise, show the date if present, or nothing
+                  if (epDateStr.isNotEmpty) return Text(epDateStr);
+                  return null;
+                }(),
+                onChanged: enabled ? (v) => onEpisodeToggle(epNum, v ?? false) : null,
               );
             }),
         ],

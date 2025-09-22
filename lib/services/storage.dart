@@ -11,19 +11,22 @@ class Season {
   final String name;
   final int episodeCount;
   final int watched;
+  final String airDate; // YYYY-MM-DD (may be empty)
 
   const Season({
     required this.seasonNumber,
     required this.name,
     required this.episodeCount,
     this.watched = 0,
+    this.airDate = '',
   });
 
-  Season copyWith({int? watched}) => Season(
+  Season copyWith({int? watched, String? airDate}) => Season(
         seasonNumber: seasonNumber,
         name: name,
         episodeCount: episodeCount,
         watched: watched ?? this.watched,
+        airDate: airDate ?? this.airDate,
       );
 
   double get progress => episodeCount == 0 ? 0 : watched / episodeCount;
@@ -34,13 +37,15 @@ class Season {
         'name': name,
         'cnt': episodeCount,
         'w': watched,
+    'ad': airDate,
       };
 
   factory Season.fromJson(Map<String, dynamic> m) => Season(
         seasonNumber: m['n'],
         name: m['name'],
         episodeCount: m['cnt'],
-        watched: m['w'],
+    watched: m['w'],
+    airDate: (m['ad'] as String?) ?? '',
       );
 }
 
@@ -170,6 +175,8 @@ class AppStorage extends ChangeNotifier {
     _prefs = await SharedPreferences.getInstance();
     _load();
     _purgeSeedDemoIfPresent();
+    _reclassifyByAirDates();
+    _persist();
   }
 
   // UI preferences (lightweight key-value helpers)
@@ -284,8 +291,20 @@ class AppStorage extends ChangeNotifier {
     final idx = _shows.indexWhere((s) => s.id == show.id);
     final base = idx == -1 ? show : _shows[idx];
 
-    final allDone =
-        base.seasons.map((s) => s.copyWith(watched: s.episodeCount)).toList();
+    // Only mark Aired seasons as watched; keep future seasons at 0
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    bool seasonAired(Season s) {
+      if (s.airDate.isEmpty) return true;
+      final d = DateTime.tryParse(s.airDate);
+      if (d == null) return true;
+      return !DateTime(d.year, d.month, d.day).isAfter(today);
+    }
+    final allDone = base.seasons
+        .map((s) => seasonAired(s)
+            ? s.copyWith(watched: s.episodeCount)
+            : s.copyWith(watched: 0))
+        .toList();
 
     final newShow = base.copyWith(
       seasons: allDone,
@@ -383,9 +402,19 @@ class AppStorage extends ChangeNotifier {
       updated = updated.copyWith(flag: WatchFlag.none);
     }
 
-    // Keep Completed only if ALL episodes are checked; otherwise drop it.
-    final total = updated.totalEpisodes;
-    final watchedAll = total > 0 && updated.watchedEpisodes >= total;
+    // Keep Completed only if ALL aired episodes are checked; otherwise drop it.
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    bool _seasonAired(Season s) {
+      if (s.airDate.isEmpty) return false; // unknown → T.B.A. (not aired yet)
+      final d = DateTime.tryParse(s.airDate);
+      if (d == null) return false;
+      return !DateTime(d.year, d.month, d.day).isAfter(today);
+    }
+    final airedSeasons = updated.seasons.where(_seasonAired).toList();
+    final totalAired = airedSeasons.fold<int>(0, (a, s) => a + s.episodeCount);
+    final watchedAired = airedSeasons.fold<int>(0, (a, s) => a + s.watched);
+    final watchedAll = totalAired > 0 && watchedAired >= totalAired;
     if (watchedAll) {
       // Mark as completed (covers transitioning from none/watchlist → completed).
       if (!updated.isCompleted) {
@@ -401,6 +430,35 @@ class AppStorage extends ChangeNotifier {
     _shows[idx] = updated;
     _persist();
     notifyListeners();
+  }
+
+  // Reclassify shows based on air dates at startup (e.g., Completed → Ongoing when new season airs)
+  void _reclassifyByAirDates() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    bool seasonAired(Season s) {
+      if (s.airDate.isEmpty) return false; // unknown → not aired
+      final d = DateTime.tryParse(s.airDate);
+      if (d == null) return false;
+      return !DateTime(d.year, d.month, d.day).isAfter(today);
+    }
+
+    for (var i = 0; i < _shows.length; i++) {
+      final s = _shows[i];
+      if (s.mediaType != MediaType.tv) continue;
+
+      final airedSeasons = s.seasons.where(seasonAired).toList();
+      final totalAired = airedSeasons.fold<int>(0, (a, e) => a + e.episodeCount);
+      final watchedAired = airedSeasons.fold<int>(0, (a, e) => a + e.watched);
+      final shouldBeCompleted = totalAired > 0 && watchedAired >= totalAired;
+
+      if (shouldBeCompleted && !s.isCompleted) {
+        _shows[i] = s.copyWith(flag: WatchFlag.completed);
+      }
+      if (!shouldBeCompleted && s.isCompleted) {
+        _shows[i] = s.copyWith(flag: WatchFlag.none);
+      }
+    }
   }
 
   // PERSISTENCE

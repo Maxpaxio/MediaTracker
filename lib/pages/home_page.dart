@@ -93,9 +93,10 @@ class _HomePageState extends State<HomePage> {
         .toList();
 
   final hasQuery = multiSearch.text.text.isNotEmpty;
+  // TV page should show only TV results (exclude movies and persons)
   final filteredResults = multiSearch.results
-    .where((r) => r.kind != MultiKind.person)
-    .toList(growable: false);
+      .where((r) => r.kind == MultiKind.tv)
+      .toList(growable: false);
 
     return Scaffold(
         appBar: AppBar(
@@ -298,7 +299,6 @@ class _HomePageState extends State<HomePage> {
                     Widget row;
                     switch (item.kind) {
                       case MultiKind.tv:
-                      case MultiKind.movie:
                         final show = item.show!;
                         row = Align(
                           alignment: Alignment.topCenter,
@@ -315,6 +315,7 @@ class _HomePageState extends State<HomePage> {
                           ),
                         );
                         break;
+                      case MultiKind.movie:
                       case MultiKind.person:
                         row = const SizedBox.shrink();
                         break;

@@ -315,6 +315,7 @@ class TmdbApi {
               name: asStr(e['name']), // (en-US gives "Season 1" etc.)
               episodeCount: asInt(e['episode_count']),
               watched: 0,
+        airDate: asStr(e['air_date']),
             ))
         .toList(growable: false);
 
@@ -422,6 +423,26 @@ class TmdbApi {
           (e as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
       final rt = (em['runtime'] as num?)?.toInt() ?? 0;
       return rt;
+    }).toList(growable: false);
+  }
+
+  /// Fetch per-episode air dates (YYYY-MM-DD) for a specific season.
+  /// Returns a list of strings where index (episodeNumber - 1) maps to the date (may be empty).
+  Future<List<String>> fetchSeasonEpisodeAirDates(
+      int showId, int seasonNumber) async {
+    final uri = Uri.parse('$_base/tv/$showId/season/$seasonNumber')
+        .replace(queryParameters: {'api_key': _key, 'language': 'en-US'});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      return const <String>[];
+    }
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    final eps = (m['episodes'] as List?) ?? const [];
+    return eps.map<String>((e) {
+      final em =
+          (e as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+      final date = (em['air_date'] as String?) ?? '';
+      return date;
     }).toList(growable: false);
   }
 
