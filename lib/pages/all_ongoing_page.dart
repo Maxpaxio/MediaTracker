@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
 import '../widgets/provider_corner_grid.dart';
+import '../widgets/provider_filter_bar.dart';
 import '../utils/sort.dart';
+import '../widgets/sync_actions.dart';
 
 class AllOngoingPage extends StatefulWidget {
   static const route = '/ongoing';
@@ -14,6 +16,7 @@ class AllOngoingPage extends StatefulWidget {
 class _AllOngoingPageState extends State<AllOngoingPage> {
   ShowSortMode _mode = ShowSortMode.lastAdded;
   bool _ascending = defaultAscendingFor(ShowSortMode.lastAdded);
+  Set<String> _selectedProviders = <String>{};
 
   static const _kModeKey = 'sort.ongoing.mode';
   static const _kAscKey = 'sort.ongoing.asc';
@@ -39,15 +42,20 @@ class _AllOngoingPageState extends State<AllOngoingPage> {
 
   @override
   Widget build(BuildContext context) {
-  final items = StorageScope.of(context)
+  final allItems = StorageScope.of(context)
     .ongoing
     .where((s) => s.mediaType == MediaType.tv)
-    .toList()
-    .sortedBy(_mode, ascending: _ascending);
+    .toList();
+  // Apply provider filter (OR across selected providers). If none selected, show all.
+  final filtered = _selectedProviders.isEmpty
+      ? allItems
+      : allItems.where((s) => s.providers.any(_selectedProviders.contains)).toList();
+  final items = filtered.sortedBy(_mode, ascending: _ascending);
     return Scaffold(
       appBar: AppBar(
         title: Text('Ongoing (${items.length})'),
         actions: [
+          const SyncActions(),
           _SortButton(
             mode: _mode,
             ascending: _ascending,
@@ -65,24 +73,36 @@ class _AllOngoingPageState extends State<AllOngoingPage> {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          const minCardWidth = 130.0;
-          final crossAxisCount =
-              (constraints.maxWidth / minCardWidth).floor().clamp(3, 12);
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              // Allow space for a progress bar and a small label under the poster
-              childAspectRatio: 0.54,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+      body: Column(
+        children: [
+          ProviderFilterBar(
+            items: allItems,
+            selected: _selectedProviders,
+            onChanged: (next) => setState(() => _selectedProviders = next),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const minCardWidth = 130.0;
+                final crossAxisCount = (constraints.maxWidth / minCardWidth)
+                    .floor()
+                    .clamp(3, 12);
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    // Allow space for a progress bar and a small label under the poster
+                    childAspectRatio: 0.54,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _Poster(show: items[i]),
+                );
+              },
             ),
-            itemCount: items.length,
-            itemBuilder: (_, i) => _Poster(show: items[i]),
-          );
-        },
+          ),
+        ],
       ),
     );
   }

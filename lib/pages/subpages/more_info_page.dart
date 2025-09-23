@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/storage.dart';
 import '../../services/tmdb_api.dart';
 import '../../widgets/provider_corner_grid.dart';
+import '../../widgets/sync_actions.dart';
 
 class MoreInfoPage extends StatefulWidget {
   static const route = '/more-info';
@@ -128,7 +129,7 @@ class _MoreInfoPageState extends State<MoreInfoPage> {
 
     final isMovie = s.mediaType == MediaType.movie;
     return Scaffold(
-      appBar: AppBar(title: Text('${s.title} – More info')),
+      appBar: AppBar(title: Text('${s.title} – More info'), actions: const [SyncActions()]),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
@@ -554,7 +555,7 @@ class _PersonCreditsPageState extends State<PersonCreditsPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(_name.isEmpty ? 'Person' : _name)),
+      appBar: AppBar(title: Text(_name.isEmpty ? 'Person' : _name), actions: const [SyncActions()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

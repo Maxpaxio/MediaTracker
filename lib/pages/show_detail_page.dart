@@ -9,6 +9,7 @@ import '../services/settings_controller.dart';
 import '../widgets/show_hero.dart';
 import 'subpages/more_info_page.dart';
 import '../widgets/region_picker_button.dart';
+import '../widgets/sync_actions.dart';
 
 class ShowDetailArgs {
   final int showId;
@@ -428,6 +429,7 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        actions: const [SyncActions()],
       ),
       body: ListView(
         children: [

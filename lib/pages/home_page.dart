@@ -4,7 +4,7 @@ import '../services/storage.dart';
 import '../services/show_search_controller.dart';
 import '../services/multi_search_controller.dart'; // NEW: to integrate multi search
 // (region & settings imports removed after unifying provider logos overlay)
-import '../services/sync_file_service.dart';
+import '../widgets/sync_actions.dart';
 import 'sync_connect_page.dart';
 import '../widgets/section_title.dart';
 import '../widgets/watchlist_poster.dart';
@@ -122,35 +122,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          actions: [
-            Builder(builder: (context) {
-              final sync = SyncScope.of(context);
-              Color color;
-              switch (sync.state) {
-                case SyncFileState.disconnected:
-                  color = Colors.white54;
-                  break;
-                case SyncFileState.idle:
-                  color = Colors.lightGreenAccent;
-                  break;
-                case SyncFileState.syncing:
-                  color = Colors.amberAccent;
-                  break;
-                case SyncFileState.error:
-                  color = Colors.redAccent;
-                  break;
-              }
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(Icons.circle, size: 10, color: color),
-              );
-            }),
-            IconButton(
-              tooltip: 'Sync now',
-              onPressed: () => SyncScope.of(context).syncNow(),
-              icon: const Icon(Icons.sync),
-            ),
-          ],
+          actions: const [SyncActions()],
         ),
         drawer: Drawer(
           child: SafeArea(

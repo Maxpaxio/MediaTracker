@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/storage.dart';
 import '../widgets/provider_corner_grid.dart';
 import '../utils/sort.dart';
+import '../widgets/sync_actions.dart';
 
 class AllAbandonedTvPage extends StatefulWidget {
   static const route = '/abandoned/tv';
@@ -47,6 +48,7 @@ class _AllAbandonedTvPageState extends State<AllAbandonedTvPage> {
       appBar: AppBar(
         title: Text('Abandoned TV (${items.length})'),
         actions: [
+          const SyncActions(),
           _SortButton(
             mode: _mode,
             ascending: _ascending,

@@ -8,6 +8,7 @@ import 'films_page.dart';
 import 'sync_connect_page.dart';
 import 'settings_page.dart';
 import 'search_results_page.dart';
+import '../widgets/sync_actions.dart';
 
 enum TimeBreakdown {
   seconds,
@@ -161,6 +162,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     }
 
     return Scaffold(
+      // Single AppBar with all actions combined, including SyncActions and stats controls.
       appBar: AppBar(
         title: const Text('Statistics'),
         leadingWidth: 96,
@@ -182,6 +184,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
           ],
         ),
         actions: [
+          const SyncActions(),
           Builder(builder: (context) {
             final stats = StatsScope.of(context);
             return Padding(

@@ -132,9 +132,13 @@ class SyncFileService extends ChangeNotifier {
   /// Pull-merge-push loop entry. Safe to call often.
   Future<void> syncNow() async {
     if (_endpoint == null) return;
+    // If a sync is already in progress, just queue another run and return.
+    if (_state == SyncFileState.syncing) {
+      _syncQueued = true;
+      return;
+    }
     _state = SyncFileState.syncing;
     notifyListeners();
-    _suppressChangeSync = true; // prevent feedback loop while we reconcile
     try {
       final remote = await _readRemote();
       final local = _toDoc(storage.all);
@@ -145,7 +149,11 @@ class SyncFileService extends ChangeNotifier {
         await _writeRemote(merged);
       }
       // Replace local with merged to keep consistent ordering/content.
-      storage.replaceAll(_fromDoc(merged));
+  _suppressChangeSync = true; // suppress only during local replace to avoid feedback
+  storage.replaceAll(_fromDoc(merged));
+  _snapshotCategoryFlags(); // refresh baseline to merged local state
+  _suppressChangeSync = false;
+
       _lastSyncAt = DateTime.now();
       _lastError = null;
       _state = SyncFileState.idle;
@@ -156,12 +164,38 @@ class SyncFileService extends ChangeNotifier {
       _state = SyncFileState.error;
       notifyListeners();
     } finally {
-      _suppressChangeSync = false;
-      if (_syncQueued && _endpoint != null) {
+      // Drain any queued syncs that were requested during the run, but
+      // coalesce bursts using a short grace period.
+      while (_syncQueued && _endpoint != null) {
         _syncQueued = false;
-        // Trigger a follow-up sync to capture changes that arrived during syncing.
-        // Do not wait interval; run immediately.
-        await syncNow();
+        // Grace delay to batch additional quick changes.
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        // If more changes landed during grace period, loop will repeat.
+        if (_syncQueued == true) continue;
+
+        _state = SyncFileState.syncing;
+        notifyListeners();
+        try {
+          final remote = await _readRemote();
+          final local = _toDoc(storage.all);
+          final merged = _merge(remote, local);
+          if (!_deepEquals(merged, remote)) {
+            await _writeRemote(merged);
+          }
+          _suppressChangeSync = true;
+          storage.replaceAll(_fromDoc(merged));
+          _snapshotCategoryFlags();
+          _suppressChangeSync = false;
+          _lastSyncAt = DateTime.now();
+          _lastError = null;
+          _state = SyncFileState.idle;
+          _autoSyncPending = false;
+          notifyListeners();
+        } catch (e) {
+          _lastError = e.toString();
+          _state = SyncFileState.error;
+          notifyListeners();
+        }
       }
     }
   }
@@ -317,7 +351,7 @@ class SyncFileService extends ChangeNotifier {
 
   // --- Local change detection -> auto-sync ---
   void _onStorageChanged() {
-    if (_suppressChangeSync) return; // ignore internal updates during sync
+    if (_suppressChangeSync) return; // ignore internal updates during local replace
     if (_endpoint == null) return; // not connected
     // Only auto-sync when a category membership changes (watchlist/completed toggles)
     final changed = _categoryChangedSinceLastSnapshot();
@@ -329,10 +363,7 @@ class SyncFileService extends ChangeNotifier {
       _pendingChangeSync = false;
       if (_endpoint == null) return;
       // If a sync is in progress, queue one immediately after.
-      if (_state == SyncFileState.syncing) {
-        _syncQueued = true;
-        return;
-      }
+      if (_state == SyncFileState.syncing) { _syncQueued = true; return; }
       try {
         await _maybeRefreshToken();
         await syncNow();

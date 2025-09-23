@@ -7,6 +7,7 @@ import 'search_results_page.dart';
 import '../services/settings_controller.dart';
 import '../services/region.dart';
 import '../widgets/tmdb_attribution.dart';
+import '../widgets/sync_actions.dart';
 
 class SettingsPage extends StatefulWidget {
   static const route = '/settings';
@@ -95,6 +96,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ],
         ),
+        actions: const [SyncActions()],
       ),
       drawer: Drawer(
         child: SafeArea(

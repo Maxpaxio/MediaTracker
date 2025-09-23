@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
 import '../widgets/provider_corner_grid.dart';
+import '../widgets/provider_filter_bar.dart';
 import '../utils/sort.dart';
+import '../widgets/sync_actions.dart';
 
 class AllWatchlistPage extends StatefulWidget {
   static const route = '/watchlist';
@@ -14,6 +16,7 @@ class AllWatchlistPage extends StatefulWidget {
 class _AllWatchlistPageState extends State<AllWatchlistPage> {
   ShowSortMode _mode = ShowSortMode.lastAdded;
   bool _ascending = defaultAscendingFor(ShowSortMode.lastAdded);
+  Set<String> _selectedProviders = <String>{};
 
   static const _kModeKey = 'sort.watchlist.mode';
   static const _kAscKey = 'sort.watchlist.asc';
@@ -38,15 +41,19 @@ class _AllWatchlistPageState extends State<AllWatchlistPage> {
 
   @override
   Widget build(BuildContext context) {
-  final items = StorageScope.of(context)
-    .watchlist
-    .where((s) => s.mediaType == MediaType.tv)
-    .toList()
-    .sortedBy(_mode, ascending: _ascending);
+    final allItems = StorageScope.of(context)
+        .watchlist
+        .where((s) => s.mediaType == MediaType.tv)
+        .toList();
+    final filtered = _selectedProviders.isEmpty
+        ? allItems
+        : allItems.where((s) => s.providers.any(_selectedProviders.contains)).toList();
+    final items = filtered.sortedBy(_mode, ascending: _ascending);
     return Scaffold(
       appBar: AppBar(
         title: Text('Watchlist (${items.length})'),
         actions: [
+          const SyncActions(),
           _SortButton(
             mode: _mode,
             ascending: _ascending,
@@ -64,24 +71,35 @@ class _AllWatchlistPageState extends State<AllWatchlistPage> {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          const minCardWidth = 130.0;
-          final crossAxisCount = (constraints.maxWidth / minCardWidth)
-              .floor()
-              .clamp(3, 12);
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 2 / 3,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+      body: Column(
+        children: [
+          ProviderFilterBar(
+            items: allItems,
+            selected: _selectedProviders,
+            onChanged: (next) => setState(() => _selectedProviders = next),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const minCardWidth = 130.0; // poster width target
+                final crossAxisCount = (constraints.maxWidth / minCardWidth)
+                    .floor()
+                    .clamp(3, 12);
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: 2 / 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _Poster(show: items[i]),
+                );
+              },
             ),
-            itemCount: items.length,
-            itemBuilder: (_, i) => _Poster(show: items[i]),
-          );
-        },
+          ),
+        ],
       ),
     );
   }

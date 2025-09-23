@@ -11,6 +11,7 @@ import 'search_results_page.dart';
 import 'settings_page.dart';
 import 'statistics_page.dart';
 import 'sync_connect_page.dart';
+import '../widgets/sync_actions.dart';
 
 class AbandonedPage extends StatelessWidget {
   static const route = '/abandoned';
@@ -51,6 +52,7 @@ class AbandonedPage extends StatelessWidget {
             ),
           ],
         ),
+        actions: const [SyncActions()],
       ),
       drawer: Drawer(
         child: SafeArea(

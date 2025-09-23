@@ -9,6 +9,7 @@ import 'settings_page.dart';
 import 'sync_connect_page.dart';
 import 'statistics_page.dart';
 import 'subpages/more_info_page.dart';
+import '../widgets/sync_actions.dart';
 
 class SearchResultsPage extends StatefulWidget {
   static const route = '/search';
@@ -91,6 +92,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
             ),
           ],
         ),
+        actions: const [SyncActions()],
       ),
       drawer: Drawer(
         child: SafeArea(

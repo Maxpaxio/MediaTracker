@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
 import '../widgets/provider_corner_grid.dart';
+import '../widgets/provider_filter_bar.dart';
 import '../utils/sort.dart';
+import '../widgets/sync_actions.dart';
 
 class AllMoviesCompletedPage extends StatefulWidget {
   static const route = '/movies/completed';
@@ -14,6 +16,7 @@ class AllMoviesCompletedPage extends StatefulWidget {
 class _AllMoviesCompletedPageState extends State<AllMoviesCompletedPage> {
   ShowSortMode _mode = ShowSortMode.lastAdded;
   bool _ascending = defaultAscendingFor(ShowSortMode.lastAdded);
+  Set<String> _selectedProviders = <String>{};
 
   static const _kModeKey = 'sort.movies.completed.mode';
   static const _kAscKey = 'sort.movies.completed.asc';
@@ -38,15 +41,19 @@ class _AllMoviesCompletedPageState extends State<AllMoviesCompletedPage> {
 
   @override
   Widget build(BuildContext context) {
-  final items = StorageScope.of(context)
+  final allItems = StorageScope.of(context)
         .completed
         .where((s) => s.mediaType == MediaType.movie)
-        .toList()
-    .sortedBy(_mode, ascending: _ascending);
+        .toList();
+    final filtered = _selectedProviders.isEmpty
+        ? allItems
+        : allItems.where((s) => s.providers.any(_selectedProviders.contains)).toList();
+    final items = filtered.sortedBy(_mode, ascending: _ascending);
     return Scaffold(
       appBar: AppBar(
         title: Text('Completed Movies (${items.length})'),
         actions: [
+          const SyncActions(),
           _SortButton(
             mode: _mode,
             ascending: _ascending,
@@ -64,24 +71,35 @@ class _AllMoviesCompletedPageState extends State<AllMoviesCompletedPage> {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          const minCardWidth = 130.0; // poster width target
-          final crossAxisCount = (constraints.maxWidth / minCardWidth)
-              .floor()
-              .clamp(3, 12);
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 2 / 3,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+      body: Column(
+        children: [
+          ProviderFilterBar(
+            items: allItems,
+            selected: _selectedProviders,
+            onChanged: (next) => setState(() => _selectedProviders = next),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const minCardWidth = 130.0; // poster width target
+                final crossAxisCount = (constraints.maxWidth / minCardWidth)
+                    .floor()
+                    .clamp(3, 12);
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: 2 / 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _Poster(show: items[i]),
+                );
+              },
             ),
-            itemCount: items.length,
-            itemBuilder: (_, i) => _Poster(show: items[i]),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
