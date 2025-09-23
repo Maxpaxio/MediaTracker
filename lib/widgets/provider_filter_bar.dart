@@ -29,6 +29,7 @@ class _ProviderFilterBarState extends State<ProviderFilterBar> {
   static final Map<String, Set<String>> _cache = {};
   bool _loading = false;
   bool _didInitialEnsure = false;
+  String? _lastItemsSig;
 
   @override
   void initState() {
@@ -38,7 +39,9 @@ class _ProviderFilterBarState extends State<ProviderFilterBar> {
   @override
   void didUpdateWidget(covariant ProviderFilterBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.items, widget.items)) {
+    final sig = _sigForItems(widget.items);
+    if (_lastItemsSig != sig) {
+      _lastItemsSig = sig;
       _ensureProviders();
     }
   }
@@ -48,8 +51,14 @@ class _ProviderFilterBarState extends State<ProviderFilterBar> {
     super.didChangeDependencies();
     if (!_didInitialEnsure) {
       _didInitialEnsure = true;
+      _lastItemsSig = _sigForItems(widget.items);
       _ensureProviders();
     }
+  }
+
+  String _sigForItems(List<Show> items) {
+    final ids = items.map((s) => s.id).toList()..sort();
+    return ids.join(',');
   }
 
   String _keyFor(Show s) => '${s.mediaType.name}:${s.id}';
@@ -82,8 +91,25 @@ class _ProviderFilterBarState extends State<ProviderFilterBar> {
   final region = _effectiveRegion(context);
   final storage = _tryStorage(context);
 
-    // Fetch sequentially to avoid hammering; stop early if we already discovered many providers
+    // Fetch a limited subset to reduce cost; stop early when we have enough unique providers to populate chips
+    final pending = <Show>[];
     for (final s in widget.items) {
+      final key = _keyFor(s);
+      if (s.providers.isEmpty && !_cache.containsKey(key)) pending.add(s);
+    }
+
+    // If nothing to fetch, finish
+    if (pending.isEmpty) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
+    // Limit to up to 12 fetches per page enter to avoid jank
+    final toFetch = pending.take(12).toList(growable: false);
+
+    final discovered = <String>{};
+    final bulk = <int, List<String>>{};
+    for (final s in toFetch) {
       if (!mounted) break;
       final key = _keyFor(s);
       if (s.providers.isNotEmpty || _cache.containsKey(key)) continue;
@@ -99,15 +125,19 @@ class _ProviderFilterBarState extends State<ProviderFilterBar> {
         };
         if (names.isNotEmpty) {
           _cache[key] = names;
-          // Persist to storage so page-level filtering works consistently
-          if (storage != null) {
-            final updated = s.copyWith(providers: names.toList());
-            storage.updateShow(updated);
-          }
+          discovered.addAll(names);
+          bulk[s.id] = names.toList();
+          // If we have enough options (>= 8), we can stop early for UI responsiveness
+          if (discovered.length >= 8) break;
         }
       } catch (_) {
         // Ignore failures silently; chips will be based on whatever we have.
       }
+    }
+
+    // Apply a single bulk storage update to avoid multiple rebuilds
+    if (storage != null && bulk.isNotEmpty) {
+      storage.updateProvidersBulkSilent(bulk);
     }
 
     if (mounted) setState(() => _loading = false);

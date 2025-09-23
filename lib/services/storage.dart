@@ -432,6 +432,55 @@ class AppStorage extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Bulk update: set providers for multiple shows at once and notify once.
+  /// The map key is show id, value is the list of provider names.
+  void updateProvidersBulk(Map<int, List<String>> providersById) {
+    if (providersById.isEmpty) return;
+    bool anyChange = false;
+    for (var i = 0; i < _shows.length; i++) {
+      final s = _shows[i];
+      final upd = providersById[s.id];
+      if (upd == null) continue;
+      if (upd.length == s.providers.length) {
+        bool equal = true;
+        for (int j = 0; j < upd.length; j++) {
+          if (upd[j] != s.providers[j]) { equal = false; break; }
+        }
+        if (equal) continue;
+      }
+      _shows[i] = s.copyWith(providers: List<String>.from(upd));
+      anyChange = true;
+    }
+    if (anyChange) {
+      _persist();
+      notifyListeners();
+    }
+  }
+
+  /// Same as [updateProvidersBulk] but does not notify listeners to avoid rebuild storms.
+  void updateProvidersBulkSilent(Map<int, List<String>> providersById) {
+    if (providersById.isEmpty) return;
+    bool anyChange = false;
+    for (var i = 0; i < _shows.length; i++) {
+      final s = _shows[i];
+      final upd = providersById[s.id];
+      if (upd == null) continue;
+      if (upd.length == s.providers.length) {
+        bool equal = true;
+        for (int j = 0; j < upd.length; j++) {
+          if (upd[j] != s.providers[j]) { equal = false; break; }
+        }
+        if (equal) continue;
+      }
+      _shows[i] = s.copyWith(providers: List<String>.from(upd));
+      anyChange = true;
+    }
+    if (anyChange) {
+      _persist();
+      // no notify
+    }
+  }
+
   // Reclassify shows based on air dates at startup (e.g., Completed → Ongoing when new season airs)
   void _reclassifyByAirDates() {
     final now = DateTime.now();
