@@ -12,7 +12,10 @@ import '../widgets/region_picker_button.dart';
 
 class ShowDetailArgs {
   final int showId;
-  ShowDetailArgs({required this.showId});
+  // Optional hint to force the media type (tv/movie) when loading details.
+  // This helps avoid ambiguities on platforms where route arguments/state can be flaky (e.g., PWA).
+  final MediaType? forcedType;
+  ShowDetailArgs({required this.showId, this.forcedType});
 }
 
 class ShowDetailPage extends StatefulWidget {
@@ -28,6 +31,8 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
 
   int? _showId;
   bool _loading = true;
+
+  MediaType? _forcedType; // from navigation args or parsed route
 
   Show? _show;
 
@@ -50,6 +55,7 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ShowDetailArgs) {
       _showId = args.showId;
+      _forcedType = args.forcedType;
       _loadAll();
     } else {
       setState(() => _loading = false);
@@ -66,9 +72,10 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
 
     // Peek existing to determine media type (movie vs tv)
     final cached = storage.tryGet(id);
+    final isMovie = (_forcedType ?? cached?.mediaType) == MediaType.movie;
 
     // Refresh full detail (en-US) using proper endpoint
-    if (cached?.mediaType == MediaType.movie) {
+    if (isMovie) {
       await _refreshMovieFromTmdb(storage, id);
     } else {
       // Default to TV if unknown
@@ -84,7 +91,7 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     }
 
     // Providers: STRICT to SE (no fallback) and correct type
-    final mt = (s?.mediaType) ?? cached?.mediaType ?? MediaType.tv;
+  final mt = _forcedType ?? (s?.mediaType) ?? cached?.mediaType ?? MediaType.tv;
     final settingsCtrl = SettingsScope.of(context);
     final region =
         settingsCtrl.effectiveRegion ?? detectRegionCode(fallback: 'US');

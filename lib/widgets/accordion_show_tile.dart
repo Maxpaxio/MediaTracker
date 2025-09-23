@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
-import '../pages/show_detail_page.dart';
 
 class AccordionShowTile extends StatelessWidget {
   const AccordionShowTile({super.key, required this.show, this.trailing});
@@ -14,8 +13,7 @@ class AccordionShowTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: () => Navigator.pushNamed(
           context,
-          ShowDetailPage.route,
-          arguments: ShowDetailArgs(showId: show.id),
+          show.mediaType == MediaType.movie ? '/movie/${show.id}' : '/tv/${show.id}',
         ),
         child: Padding(
           padding: const EdgeInsets.all(12),

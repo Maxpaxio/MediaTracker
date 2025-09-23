@@ -81,12 +81,41 @@ class MediaTrackerApp extends StatelessWidget {
               SyncConnectPage.route: (_) => const SyncConnectPage(),
             },
             onGenerateRoute: (settings) {
+              // Support explicit named route using arguments
               if (settings.name == ShowDetailPage.route) {
                 return MaterialPageRoute(
-                  builder: (_) => const ShowDetailPage(), // ✅ no args param
-                  settings:
-                      settings, // ✅ keep settings so arguments are available inside
+                  builder: (_) => const ShowDetailPage(),
+                  settings: settings,
                 );
+              }
+
+              // Support path routes for PWA/deep-link robustness: /tv/<id> and /movie/<id>
+              final name = settings.name ?? '';
+              if (name.startsWith('/tv/')) {
+                final idStr = name.substring('/tv/'.length);
+                final id = int.tryParse(idStr);
+                if (id != null) {
+                  return MaterialPageRoute(
+                    builder: (_) => const ShowDetailPage(),
+                    settings: RouteSettings(
+                      name: ShowDetailPage.route,
+                      arguments: ShowDetailArgs(showId: id, forcedType: MediaType.tv),
+                    ),
+                  );
+                }
+              }
+              if (name.startsWith('/movie/')) {
+                final idStr = name.substring('/movie/'.length);
+                final id = int.tryParse(idStr);
+                if (id != null) {
+                  return MaterialPageRoute(
+                    builder: (_) => const ShowDetailPage(),
+                    settings: RouteSettings(
+                      name: ShowDetailPage.route,
+                      arguments: ShowDetailArgs(showId: id, forcedType: MediaType.movie),
+                    ),
+                  );
+                }
               }
 
               if (settings.name == MoreInfoPage.route) {

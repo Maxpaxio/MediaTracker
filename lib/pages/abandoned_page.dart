@@ -11,7 +11,6 @@ import 'search_results_page.dart';
 import 'settings_page.dart';
 import 'statistics_page.dart';
 import 'sync_connect_page.dart';
-import 'show_detail_page.dart';
 
 class AbandonedPage extends StatelessWidget {
   static const route = '/abandoned';
@@ -158,8 +157,7 @@ class AbandonedPage extends StatelessWidget {
                   itemBuilder: (_, i) => GestureDetector(
                     onTap: () => Navigator.pushNamed(
                       context,
-                      ShowDetailPage.route,
-                      arguments: ShowDetailArgs(showId: movies[i].id),
+                      '/movie/${movies[i].id}',
                     ),
                     child: _AbandonedPoster(show: movies[i]),
                   ),
@@ -187,8 +185,7 @@ class AbandonedPage extends StatelessWidget {
                   itemBuilder: (_, i) => GestureDetector(
                     onTap: () => Navigator.pushNamed(
                       context,
-                      ShowDetailPage.route,
-                      arguments: ShowDetailArgs(showId: tv[i].id),
+                      '/tv/${tv[i].id}',
                     ),
                     child: _AbandonedPoster(show: tv[i]),
                   ),

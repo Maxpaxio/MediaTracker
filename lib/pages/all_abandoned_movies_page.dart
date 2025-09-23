@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/storage.dart';
-import 'show_detail_page.dart';
 import '../widgets/provider_corner_grid.dart';
 import '../utils/sort.dart';
 
@@ -126,8 +125,7 @@ class _Poster extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(
         context,
-        ShowDetailPage.route,
-        arguments: ShowDetailArgs(showId: show.id),
+        '/movie/${show.id}',
       ),
       child: Stack(
         children: [

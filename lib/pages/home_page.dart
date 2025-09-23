@@ -15,7 +15,6 @@ import 'search_results_page.dart';
 import 'all_ongoing_page.dart';
 import 'all_completed_page.dart';
 import 'all_watchlist_page.dart';
-import 'show_detail_page.dart';
 
 class HomePage extends StatefulWidget {
   static const route = '/tv';
@@ -56,18 +55,13 @@ class _HomePageState extends State<HomePage> {
     final storage = StorageScope.of(context);
     try {
       final id = await search.ensureDetailInStorage(storage, s);
-      await Navigator.pushNamed(
-        context,
-        ShowDetailPage.route,
-        arguments: ShowDetailArgs(showId: id),
-      );
+      // Use path-based route for robustness on iOS PWA
+      final path = s.mediaType == MediaType.movie ? '/movie/$id' : '/tv/$id';
+      await Navigator.pushNamed(context, path);
       if (mounted) setState(() {}); // refresh pills after return
     } catch (_) {
-      await Navigator.pushNamed(
-        context,
-        ShowDetailPage.route,
-        arguments: ShowDetailArgs(showId: s.id),
-      );
+      final path = s.mediaType == MediaType.movie ? '/movie/${s.id}' : '/tv/${s.id}';
+      await Navigator.pushNamed(context, path);
       if (mounted) setState(() {});
     }
   }
@@ -395,9 +389,7 @@ class _HomePageState extends State<HomePage> {
                             key: ValueKey('completed-${completed[i].id}'),
                             onTap: () => Navigator.pushNamed(
                               context,
-                              ShowDetailPage.route,
-                              arguments:
-                                  ShowDetailArgs(showId: completed[i].id),
+                              '/tv/${completed[i].id}',
                             ),
                             child: CompletedPoster(show: completed[i]),
                           ),
@@ -433,9 +425,7 @@ class _HomePageState extends State<HomePage> {
                             key: ValueKey('watchlist-${watchlist[i].id}'),
                             onTap: () => Navigator.pushNamed(
                               context,
-                              ShowDetailPage.route,
-                              arguments:
-                                  ShowDetailArgs(showId: watchlist[i].id),
+                              '/tv/${watchlist[i].id}',
                             ),
                             child: WatchlistPoster(show: watchlist[i]),
                           ),
@@ -475,8 +465,7 @@ class _OngoingCardWide extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           onTap: () => Navigator.pushNamed(
             context,
-            ShowDetailPage.route,
-            arguments: ShowDetailArgs(showId: show.id),
+            '/tv/${show.id}',
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),

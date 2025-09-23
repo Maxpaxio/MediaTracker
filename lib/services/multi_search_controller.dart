@@ -190,7 +190,26 @@ class MultiSearchController extends ChangeNotifier {
   }
 
   Future<int> ensureDetailInStorage(AppStorage storage, Show lite) async {
-    if (storage.exists(lite.id)) return lite.id;
+    final existing = storage.tryGet(lite.id);
+    if (existing != null) {
+      // If media type matches, nothing to do
+      if (existing.mediaType == lite.mediaType) return lite.id;
+      // If media type differs (rare TMDb id collision), prefer the requested type
+      if (lite.mediaType == MediaType.tv) {
+        try {
+          final api = TmdbApi();
+          final full = await api.fetchShowDetailStorage(lite.id);
+          storage.updateShow(full);
+        } catch (_) {
+          storage.updateShow(lite);
+        }
+        return lite.id;
+      } else {
+        // Movie: overwrite with lite (no seasons required)
+        storage.updateShow(lite.copyWith(mediaType: MediaType.movie));
+        return lite.id;
+      }
+    }
 
     // For TV shows, fetch full detail so seasons/episodes exist before mutations
     if (lite.mediaType == MediaType.tv) {

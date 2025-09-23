@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/storage.dart';
 import '../../services/tmdb_api.dart';
-import '../show_detail_page.dart';
 import '../../widgets/provider_corner_grid.dart';
 
 class MoreInfoPage extends StatefulWidget {
@@ -481,11 +480,8 @@ class _PersonCreditsPageState extends State<PersonCreditsPage> {
                       }
                     } catch (_) {}
                     if (!mounted) return;
-                    Navigator.pushNamed(
-                      context,
-                      ShowDetailPage.route,
-                      arguments: ShowDetailArgs(showId: id),
-                    );
+                    final path = mediaType == 'movie' ? '/movie/$id' : '/tv/$id';
+                    Navigator.pushNamed(context, path);
                   },
                   child: SizedBox(
                     width: 116,

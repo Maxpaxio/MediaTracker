@@ -126,8 +126,14 @@ class ShowsSearchController extends ChangeNotifier {
   /// Ensure we have a show in storage before we mutate it elsewhere.
   /// If already exists, return id. Otherwise, add the lite show so pills/actions work.
   Future<int> ensureDetailInStorage(AppStorage storage, Show lite) async {
-    if (storage.exists(lite.id)) return lite.id;
-    storage.ensureShow(lite); // << correct API from your storage.dart
+    final existing = storage.tryGet(lite.id);
+    if (existing != null) {
+      if (existing.mediaType == lite.mediaType) return lite.id;
+      // Overwrite with correct TV type if mismatch
+      storage.updateShow(lite.copyWith(mediaType: MediaType.tv));
+      return lite.id;
+    }
+    storage.ensureShow(lite);
     return lite.id;
     // (Your details page can later replace it with a fully-detailed Show if needed.)
   }

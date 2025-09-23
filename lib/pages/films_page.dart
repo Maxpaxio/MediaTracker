@@ -12,7 +12,6 @@ import 'all_movies_completed_page.dart';
 import 'all_movies_watchlist_page.dart';
 import 'home_page.dart';
 import 'sync_connect_page.dart';
-import 'show_detail_page.dart';
 
 class FilmsPage extends StatefulWidget {
   static const route = '/films';
@@ -273,11 +272,7 @@ class _FilmsPageState extends State<FilmsPage> {
                   ),
                   onTap: () async {
                     final id = await search.ensureDetailInStorage(storage, s);
-                    await Navigator.pushNamed(
-                      context,
-                      ShowDetailPage.route,
-                      arguments: ShowDetailArgs(showId: id),
-                    );
+                    await Navigator.pushNamed(context, '/movie/$id');
                     // No need to refresh here; detail page updates storage
                   },
                   trailing: AddMenu(
@@ -325,8 +320,7 @@ class _FilmsPageState extends State<FilmsPage> {
                         itemBuilder: (_, i) => GestureDetector(
                           onTap: () => Navigator.pushNamed(
                             context,
-                            ShowDetailPage.route,
-                            arguments: ShowDetailArgs(showId: completed[i].id),
+                            '/movie/${completed[i].id}',
                           ),
                           child: CompletedPoster(show: completed[i]),
                         ),
@@ -359,8 +353,7 @@ class _FilmsPageState extends State<FilmsPage> {
                         itemBuilder: (_, i) => GestureDetector(
                           onTap: () => Navigator.pushNamed(
                             context,
-                            ShowDetailPage.route,
-                            arguments: ShowDetailArgs(showId: watchlist[i].id),
+                            '/movie/${watchlist[i].id}',
                           ),
                           child: WatchlistPoster(show: watchlist[i]),
                         ),

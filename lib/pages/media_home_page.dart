@@ -5,7 +5,6 @@ import '../services/multi_search_controller.dart';
 import '../services/sync_file_service.dart';
 import 'home_page.dart';
 import 'films_page.dart';
-import 'show_detail_page.dart';
 import 'sync_connect_page.dart';
 import 'subpages/more_info_page.dart'; // for PersonCreditsPage
 import '../widgets/tmdb_attribution.dart';
@@ -48,18 +47,12 @@ class _MediaHomePageState extends State<MediaHomePage> {
     final storage = StorageScope.of(context);
     try {
       final id = await search.ensureDetailInStorage(storage, s);
-      await Navigator.pushNamed(
-        context,
-        ShowDetailPage.route,
-        arguments: ShowDetailArgs(showId: id),
-      );
+      final path = s.mediaType == MediaType.movie ? '/movie/$id' : '/tv/$id';
+      await Navigator.pushNamed(context, path);
       if (mounted) setState(() {});
     } catch (_) {
-      await Navigator.pushNamed(
-        context,
-        ShowDetailPage.route,
-        arguments: ShowDetailArgs(showId: s.id),
-      );
+      final path = s.mediaType == MediaType.movie ? '/movie/${s.id}' : '/tv/${s.id}';
+      await Navigator.pushNamed(context, path);
       if (mounted) setState(() {});
     }
   }
