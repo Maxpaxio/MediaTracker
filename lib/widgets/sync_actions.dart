@@ -63,6 +63,8 @@ class _SyncActionsState extends State<SyncActions>
   Widget build(BuildContext context) {
     final sync = SyncScope.of(context);
     final isSyncing = sync.state == SyncFileState.syncing;
+    final isError = sync.state == SyncFileState.error;
+    final isDisconnected = sync.state == SyncFileState.disconnected || sync.endpoint == null;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -70,14 +72,21 @@ class _SyncActionsState extends State<SyncActions>
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Icon(Icons.circle, size: 10, color: _dotColor(sync.state)),
         ),
-        IconButton(
-          tooltip: isSyncing ? 'Syncing…' : 'Sync now',
-          onPressed: isSyncing ? null : () => sync.syncNow(),
-          icon: RotationTransition(
-            turns: _spinning ? _controller : const AlwaysStoppedAnimation(0),
-            child: const Icon(Icons.sync),
+        if (isError || isDisconnected)
+          IconButton(
+            tooltip: isError ? (sync.lastError ?? 'Reconnect') : 'Connect',
+            onPressed: isSyncing ? null : () => sync.reconnect(),
+            icon: const Icon(Icons.refresh),
+          )
+        else
+          IconButton(
+            tooltip: isSyncing ? 'Syncing…' : 'Sync now',
+            onPressed: isSyncing ? null : () => sync.syncNow(),
+            icon: RotationTransition(
+              turns: _spinning ? _controller : const AlwaysStoppedAnimation(0),
+              child: const Icon(Icons.sync),
+            ),
           ),
-        ),
       ],
     );
   }

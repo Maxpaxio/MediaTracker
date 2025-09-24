@@ -48,6 +48,8 @@ class SyncFileService extends ChangeNotifier {
     }
   }
 
+  bool get isConnected => _endpoint != null && _state != SyncFileState.disconnected;
+
   Future<void> init() async {
     // Try restore last endpoint
     final prefs = await SharedPreferences.getInstance();
@@ -58,6 +60,7 @@ class SyncFileService extends ChangeNotifier {
         final ep = SyncEndpoint.fromJson(m);
         _endpoint = ep;
         _state = SyncFileState.idle;
+        _autoSyncPending = true; // ensure a check happens after inactivity
         notifyListeners();
         _scheduleTick();
       } catch (_) {}
@@ -122,7 +125,11 @@ class SyncFileService extends ChangeNotifier {
         try {
           await _maybeRefreshToken();
           await syncNow();
-        } catch (_) {}
+        } catch (e) {
+          _lastError = e.toString();
+          _state = SyncFileState.error;
+          notifyListeners();
+        }
       }
       // Reschedule while connected
       _scheduleTick();
@@ -132,6 +139,15 @@ class SyncFileService extends ChangeNotifier {
   /// Pull-merge-push loop entry. Safe to call often.
   Future<void> syncNow() async {
     if (_endpoint == null) return;
+    // Always ensure auth/session is fresh before attempting any network I/O.
+    try {
+      await _maybeRefreshToken();
+    } catch (e) {
+      _lastError = e.toString();
+      _state = SyncFileState.error;
+      notifyListeners();
+      return;
+    }
     // If a sync is already in progress, just queue another run and return.
     if (_state == SyncFileState.syncing) {
       _syncQueued = true;
@@ -176,6 +192,7 @@ class SyncFileService extends ChangeNotifier {
         _state = SyncFileState.syncing;
         notifyListeners();
         try {
+          await _maybeRefreshToken();
           final remote = await _readRemote();
           final local = _toDoc(storage.all);
           final merged = _merge(remote, local);
@@ -367,7 +384,11 @@ class SyncFileService extends ChangeNotifier {
       try {
         await _maybeRefreshToken();
         await syncNow();
-      } catch (_) {}
+      } catch (e) {
+        _lastError = e.toString();
+        _state = SyncFileState.error;
+        notifyListeners();
+      }
     });
   }
 
@@ -510,7 +531,9 @@ extension on SyncFileService {
       final cred = base64Encode(utf8.encode('${ep.username}:${ep.password}'));
       headers['authorization'] = 'Basic $cred';
     }
-    final res = await http.get(Uri.parse(ep.url), headers: headers);
+  final res = await http
+    .get(Uri.parse(ep.url), headers: headers)
+    .timeout(const Duration(seconds: 15));
     if (res.statusCode == 404) return null; // treat as empty
     if (res.statusCode >= 400) {
       throw Exception(
@@ -535,8 +558,9 @@ extension on SyncFileService {
       final cred = base64Encode(utf8.encode('${ep.username}:${ep.password}'));
       headers['authorization'] = 'Basic $cred';
     }
-    final res = await http.put(Uri.parse(ep.url),
-        headers: headers, body: jsonEncode(doc));
+  final res = await http
+    .put(Uri.parse(ep.url), headers: headers, body: jsonEncode(doc))
+    .timeout(const Duration(seconds: 15));
     if (res.statusCode >= 400) {
       throw Exception(
           'WebDAV write failed: ${res.statusCode} ${utf8.decode(res.bodyBytes)}');
@@ -566,8 +590,9 @@ extension _GoogleDrive on SyncFileService {
       'fields': 'files(id,name)',
       'pageSize': '1',
     });
-    final lr =
-        await http.get(listUri, headers: {'authorization': 'Bearer $token'});
+  final lr = await http
+    .get(listUri, headers: {'authorization': 'Bearer $token'})
+    .timeout(const Duration(seconds: 15));
     if (lr.statusCode == 401) throw Exception('Drive unauthorized (401)');
     if (lr.statusCode >= 400) {
       throw Exception(
@@ -581,18 +606,20 @@ extension _GoogleDrive on SyncFileService {
       fileId = (files.first['id'] as String?) ?? '';
     } else {
       // Create metadata in appDataFolder
-      final mr = await http.post(
-        Uri.parse('https://www.googleapis.com/drive/v3/files')
-            .replace(queryParameters: {'fields': 'id'}),
-        headers: {
-          'authorization': 'Bearer $token',
-          'content-type': 'application/json',
-        },
-        body: jsonEncode({
-          'name': 'tv_tracker_sync.json',
-          'parents': ['appDataFolder'],
-        }),
-      );
+      final mr = await http
+          .post(
+            Uri.parse('https://www.googleapis.com/drive/v3/files')
+                .replace(queryParameters: {'fields': 'id'}),
+            headers: {
+              'authorization': 'Bearer $token',
+              'content-type': 'application/json',
+            },
+            body: jsonEncode({
+              'name': 'tv_tracker_sync.json',
+              'parents': ['appDataFolder'],
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
       if (mr.statusCode >= 400) {
         throw Exception(
             'Drive create failed: ${mr.statusCode} ${utf8.decode(mr.bodyBytes)}');
@@ -620,7 +647,9 @@ extension _GoogleDrive on SyncFileService {
     final fileId = await _gdEnsureFileId(ep);
     final uri = Uri.parse('https://www.googleapis.com/drive/v3/files/$fileId')
         .replace(queryParameters: {'alt': 'media'});
-    final r = await http.get(uri, headers: {'authorization': 'Bearer $token'});
+  final r = await http
+    .get(uri, headers: {'authorization': 'Bearer $token'})
+    .timeout(const Duration(seconds: 15));
     if (r.statusCode == 404) return null;
     if (r.statusCode >= 400) {
       throw Exception(
@@ -643,12 +672,14 @@ extension _GoogleDrive on SyncFileService {
             .replace(queryParameters: {
       'uploadType': 'media',
     });
-    final r = await http.patch(uri,
-        headers: {
-          'authorization': 'Bearer $token',
-          'content-type': 'application/json',
-        },
-        body: jsonEncode(doc));
+    final r = await http
+        .patch(uri,
+            headers: {
+              'authorization': 'Bearer $token',
+              'content-type': 'application/json',
+            },
+            body: jsonEncode(doc))
+        .timeout(const Duration(seconds: 20));
     if (r.statusCode >= 400) {
       throw Exception(
           'Drive upload failed: ${r.statusCode} ${utf8.decode(r.bodyBytes)}');
