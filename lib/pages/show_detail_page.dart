@@ -44,10 +44,46 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
   String? _overrideRegion; // temporary page-level region
   List<String> _availableRegions = const [];
   Map<String, int> _regionCounts = const {};
+  // Provider -> list of available seasons (streaming only) for the current region
+  Map<int, Set<int>> _providerSeasonCoverage = const {};
+
+  // Quick metadata for right-of-poster (movies): runtime in minutes.
+  int? _movieRuntimeMinutes; // null when unknown/not loaded
 
   final Map<int, bool> _expanded = {}; // seasonNumber -> expanded
   final Map<int, List<String>> _episodeTitles = {}; // seasonNumber -> titles
   final Map<int, List<String>> _episodeAirDates = {}; // seasonNumber -> air dates
+  final Map<int, Map<int, String>> _episodeOverviews = {}; // season -> (ep -> overview)
+  final Map<int, Map<int, double>> _episodeRatings = {}; // season -> (ep -> rating)
+  final Map<int, Map<int, List<String>>> _episodeDirectors = {}; // season -> (ep -> names)
+  // Track single open season and single open episode per season (collapse others when new opens)
+  int? _openSeason; // seasonNumber
+  final Map<int, int?> _openEpisodePerSeason = {}; // seasonNumber -> episodeNumber
+  // When multi-open for episodes is enabled, track a set of open episodes per season
+  final Map<int, Set<int>> _openEpisodesMulti = {};
+
+  void setOpenSeason(int? seasonNumber) {
+    setState(() {
+      _openSeason = seasonNumber;
+      if (seasonNumber != null) {
+        // collapse others in _expanded
+        _expanded.clear();
+        _expanded[seasonNumber] = true;
+      } else {
+        _expanded.clear();
+      }
+    });
+  }
+
+  void setOpenEpisode(int seasonNumber, int? episodeNumber) {
+    setState(() {
+      _openEpisodePerSeason[seasonNumber] = episodeNumber;
+    });
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void didChangeDependencies() {
@@ -98,6 +134,13 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
         settingsCtrl.effectiveRegion ?? detectRegionCode(fallback: 'US');
     _lastRegion = region;
     await _loadProviders(id, regionCode: region, mediaType: mt);
+    // After base providers load, resolve season coverage (TV only)
+    if (!mounted) return;
+    if (mt == MediaType.tv) {
+      await _loadProviderSeasonCoverage(id, region, s);
+    } else {
+      _providerSeasonCoverage = const {};
+    }
 
     if (!mounted) return;
     setState(() {
@@ -176,6 +219,18 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
       );
 
       storage.updateShow(merged);
+
+      // Additionally, fetch extras for runtime (movies only) for right-side badges.
+      try {
+        final extras = await _api.fetchMovieExtras(movieId);
+        if (mounted) {
+          setState(() {
+            _movieRuntimeMinutes = extras.runtime > 0 ? extras.runtime : null;
+          });
+        }
+      } catch (_) {
+        // ignore extras failure
+      }
     } catch (_) {
       // ignore network errors
     }
@@ -203,6 +258,28 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
       if (!mounted) return;
       setState(() => _providersLoading = false);
     }
+  }
+
+  Future<void> _loadProviderSeasonCoverage(int showId, String region, Show? s) async {
+    final show = s ?? _show;
+    if (show == null || show.mediaType != MediaType.tv) return;
+    // Only consider real seasons (>=1)
+    final seasons = show.seasons.map((e) => e.seasonNumber).where((n) => n >= 1).toList();
+    if (seasons.isEmpty) {
+      setState(() => _providerSeasonCoverage = const {});
+      return;
+    }
+    final api = _api;
+    final byProvider = <int, Set<int>>{};
+    for (final sn in seasons) {
+      Set<int> providersForSeason = await api.fetchSeasonStreamingProviders(showId, sn, region);
+      for (final pid in providersForSeason) {
+        byProvider.putIfAbsent(pid, () => <int>{});
+        byProvider[pid]!.add(sn);
+      }
+    }
+    if (!mounted) return;
+    setState(() => _providerSeasonCoverage = byProvider);
   }
 
   Future<void> _ensureAvailableRegions(int showId, MediaType mt) async {
@@ -317,6 +394,23 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     });
   }
 
+  Future<void> _ensureEpisodeMeta(int seasonNumber, int episodeNumber) async {
+    // Fetch and cache overview, rating, and directors for a specific episode.
+    final id = _showId;
+    if (id == null) return;
+    final api = _api;
+    final details = await api.fetchEpisodeDetails(id, seasonNumber, episodeNumber);
+    final directors = await api.fetchEpisodeDirectors(id, seasonNumber, episodeNumber);
+    if (!mounted) return;
+    _episodeOverviews.putIfAbsent(seasonNumber, () => {});
+    _episodeRatings.putIfAbsent(seasonNumber, () => {});
+    _episodeDirectors.putIfAbsent(seasonNumber, () => {});
+    _episodeOverviews[seasonNumber]![episodeNumber] = details.overview;
+    _episodeRatings[seasonNumber]![episodeNumber] = details.rating;
+    _episodeDirectors[seasonNumber]![episodeNumber] = directors;
+    setState(() {});
+  }
+
   // --- Seasons helpers (tri-state) ---
   bool? _triStateFor(Season s) {
     if (s.episodeCount <= 0) return false;
@@ -414,12 +508,19 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
     final baseRegion =
         settingsCtrl.effectiveRegion ?? detectRegionCode(fallback: 'US');
     final effectiveRegion = _overrideRegion ?? baseRegion;
+  final singleOpen = SettingsScope.of(context).singleOpenSeasons;
     if (_lastRegion != null &&
         _lastRegion != effectiveRegion &&
         !_providersLoading) {
       _lastRegion = effectiveRegion;
+      // Refresh providers and season coverage when effective region changes
       _loadProviders(show.id,
           regionCode: effectiveRegion, mediaType: show.mediaType);
+      if (show.mediaType == MediaType.tv) {
+        _loadProviderSeasonCoverage(show.id, effectiveRegion, show);
+      } else {
+        setState(() => _providerSeasonCoverage = const {});
+      }
     }
     _ensureAvailableRegions(show.id, show.mediaType); // fire & forget
     return Scaffold(
@@ -435,7 +536,19 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
         children: [
           // HERO
           ShowHero(
-              show: show, height: 280, posterWidth: 150, horizontalPadding: 16),
+            show: show,
+            height: 280,
+            posterWidth: 150,
+            horizontalPadding: 16,
+            bottomOverlay: _BottomMetaPanel(
+              child: _HeroMetaColumn(
+                mediaType: show.mediaType,
+                rating: show.rating,
+                date: show.firstAirDate,
+                runtimeMinutes: show.mediaType == MediaType.movie ? _movieRuntimeMinutes : null,
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
 
           // OVERVIEW (clickable -> More Info)
@@ -483,13 +596,23 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
                       current: effectiveRegion,
                       candidates: _availableRegions,
                       counts: _regionCounts,
-                      onSelected: (code) {
+                      onSelected: (code) async {
                         setState(() {
                           _overrideRegion = code;
                           _lastRegion = code;
                         });
-                        _loadProviders(show.id,
-                            regionCode: code, mediaType: show.mediaType);
+                        await _loadProviders(
+                          show.id,
+                          regionCode: code,
+                          mediaType: show.mediaType,
+                        );
+                        if (show.mediaType == MediaType.tv) {
+                          await _loadProviderSeasonCoverage(show.id, code, show);
+                        } else {
+                          if (mounted) {
+                            setState(() => _providerSeasonCoverage = const {});
+                          }
+                        }
                       },
                     )
                   : const SizedBox.shrink(),
@@ -502,6 +625,8 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
             streaming: _streaming,
             rentBuy: _rentBuy,
             loading: _providersLoading,
+            seasonCoverage: _providerSeasonCoverage,
+            totalSeasons: show.seasons.length,
           ),
 
           const Divider(),
@@ -515,14 +640,16 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
                 children: [
                   for (final season in show.seasons)
                     _SeasonTile(
-                      key: ValueKey('season-${show.id}-${season.seasonNumber}'),
+                      key: ValueKey('season-${show.id}-${season.seasonNumber}-open-${singleOpen ? (_openSeason == season.seasonNumber) : (_expanded[season.seasonNumber] ?? false)}'),
                       show: show,
                       season: season,
                       seasonTitle: season.name.isNotEmpty
                           ? season.name
                           : 'Season ${season.seasonNumber}',
                       seasonAirDate: season.airDate,
-                      initialExpanded: _expanded[season.seasonNumber] ?? false,
+                      initialExpanded: singleOpen
+                          ? _openSeason == season.seasonNumber
+                          : (_expanded[season.seasonNumber] ?? false),
                       triStateValue: _triStateFor(season),
                       titles: _episodeTitles[season.seasonNumber],
                       airDates: _episodeAirDates[season.seasonNumber],
@@ -531,14 +658,21 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
                       onEpisodeToggle: (epNum, v) =>
                           _toggleEpisodeByCount(show, season, epNum, v),
                       onToggle: (isOpen) async {
-                        _expanded[season.seasonNumber] = isOpen;
                         if (isOpen) {
                           await _ensureEpisodeTitles(
                               season.seasonNumber, season.episodeCount);
                           await _ensureEpisodeAirDates(
                               season.seasonNumber, season.episodeCount);
                         }
-                        if (mounted) setState(() {});
+                        if (mounted) {
+                          setState(() {
+                            if (singleOpen) {
+                              _openSeason = isOpen ? season.seasonNumber : null;
+                            } else {
+                              _expanded[season.seasonNumber] = isOpen;
+                            }
+                          });
+                        }
                       },
                     ),
                   const SizedBox(height: 8),
@@ -557,6 +691,108 @@ class _ShowDetailPageState extends State<ShowDetailPage> {
         ],
       ),
       // bottomNavigationBar removed – Add-to menu handles actions
+    );
+  }
+}
+
+class _HeroMetaColumn extends StatelessWidget {
+  const _HeroMetaColumn({
+    required this.mediaType,
+    required this.rating,
+    required this.date,
+    this.runtimeMinutes,
+  });
+
+  final MediaType mediaType;
+  final double rating; // 0..10
+  final String? date; // YYYY-MM-DD or null/empty
+  final int? runtimeMinutes; // movies only
+
+  String _yearOf(String? d) {
+    if (d == null || d.isEmpty) return '';
+    if (d.length >= 4) return d.substring(0, 4);
+    return '';
+  }
+
+  String _formatRuntime(int minutes) {
+    if (minutes <= 0) return '';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    if (h > 0 && m > 0) return '${h}h ${m}min';
+    if (h > 0) return '${h}h 0min';
+    return '${m}min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Widget> lines = [];
+
+    // Line 1: Star + rating (one decimal), if rating > 0
+    if (rating > 0) {
+      lines.add(Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rate_rounded, color: Color(0xFFFFC107), size: 20),
+          const SizedBox(width: 6),
+          Text(
+            rating.toStringAsFixed(1),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
+      ));
+    }
+
+    // Line 2: Year for both TV and movies (from firstAirDate)
+    final year = _yearOf(date);
+    if (year.isNotEmpty) {
+      lines.add(Text(year, style: Theme.of(context).textTheme.bodyMedium));
+    }
+
+    // Line 3 (movies only): runtime formatted as "2h 24min"
+    if (mediaType == MediaType.movie && (runtimeMinutes ?? 0) > 0) {
+      final rt = _formatRuntime(runtimeMinutes!);
+      if (rt.isNotEmpty) {
+        lines.add(Text(rt, style: Theme.of(context).textTheme.bodyMedium));
+      }
+    }
+
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < lines.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          lines[i],
+        ],
+      ],
+    );
+  }
+}
+
+class _BottomMetaPanel extends StatelessWidget {
+  const _BottomMetaPanel({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    // Rectangular translucent panel (no rounded corners, no side feather).
+    final bg = Colors.black.withValues(alpha: 0.35);
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: IntrinsicWidth(
+        child: IntrinsicHeight(
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: bg),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: child,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -604,6 +840,8 @@ class _ProvidersBlock extends StatelessWidget {
     required this.streaming,
     required this.rentBuy,
     required this.loading,
+  this.seasonCoverage = const {},
+  this.totalSeasons = 0,
   });
 
   final int showId;
@@ -612,6 +850,8 @@ class _ProvidersBlock extends StatelessWidget {
   final List<Map<String, dynamic>> streaming;
   final List<Map<String, dynamic>> rentBuy;
   final bool loading;
+  final Map<int, Set<int>> seasonCoverage; // provider_id -> set of seasonNumbers
+  final int totalSeasons;
 
   static const _img = 'https://image.tmdb.org/t/p';
 
@@ -774,6 +1014,17 @@ class _ProvidersBlock extends StatelessWidget {
   Widget _logoTile(BuildContext context, Map<String, dynamic> m) {
     final logoPath = (m['logo_path'] as String?) ?? '';
     final name = (m['provider_name'] as String?) ?? '';
+    final pid = (m['provider_id'] as int?) ?? 0;
+    final covered = seasonCoverage[pid] ?? const <int>{};
+    final hasCoverage = totalSeasons > 0 && covered.isNotEmpty;
+    String label() {
+      if (!hasCoverage) return '';
+      // Compact: if coverage equals total show seasons, show "All"; else show sorted list
+      if (covered.length >= totalSeasons) return 'All';
+      final sorted = covered.toList()..sort();
+      // Collapse long lists: e.g., 1,2,5 or 1-4,6 depending on gaps
+      return _compactSeasons(sorted);
+    }
 
     final img = logoPath.isNotEmpty
         ? ClipRRect(
@@ -788,6 +1039,24 @@ class _ProvidersBlock extends StatelessWidget {
           )
         : _placeholder();
 
+    final badge = hasCoverage
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.white24, width: 0.5),
+            ),
+            child: Text(
+              label(),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          )
+        : const SizedBox.shrink();
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: Material(
@@ -797,14 +1066,42 @@ class _ProvidersBlock extends StatelessWidget {
           onTap: () => _launchProviderByName(name),
           child: Tooltip(
             message: name,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
-              child: Center(child: img),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                  child: Center(child: img),
+                ),
+                if (hasCoverage) ...[
+                  const SizedBox(height: 4),
+                  badge,
+                ],
+              ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  // Turn [1,2,5] into "1,2,5", and sequences like [1,2,3,5] into "1-3,5".
+  String _compactSeasons(List<int> sorted) {
+    if (sorted.isEmpty) return '';
+    final ranges = <String>[];
+    int start = sorted.first;
+    int prev = start;
+    for (int i = 1; i < sorted.length; i++) {
+      final cur = sorted[i];
+      if (cur == prev + 1) {
+        prev = cur;
+        continue;
+      }
+      ranges.add(start == prev ? '$start' : '$start-$prev');
+      start = prev = cur;
+    }
+    ranges.add(start == prev ? '$start' : '$start-$prev');
+    return ranges.join(',');
   }
 
   @override
@@ -912,10 +1209,10 @@ class _SeasonTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
+  return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
-        key: PageStorageKey('expansion-${show.id}-${season.seasonNumber}'),
+  key: ValueKey('expansion-${show.id}-${season.seasonNumber}-${initialExpanded}'),
         title: Text(seasonTitle),
         subtitle: Builder(builder: (context) {
           final now = DateTime.now();
@@ -961,7 +1258,7 @@ class _SeasonTile extends StatelessWidget {
           }),
         ),
         initiallyExpanded: initialExpanded,
-        onExpansionChanged: onToggle,
+  onExpansionChanged: onToggle,
         children: [
           if (season.episodeCount == 0)
             const ListTile(title: Text('No episodes listed for this season.'))
@@ -991,30 +1288,210 @@ class _SeasonTile extends StatelessWidget {
               final epDate = epDateStr.isNotEmpty
                   ? DateTime.tryParse(epDateStr)
                   : null;
-              final epAired = epDate != null &&
+              bool epAired = epDate != null &&
                   !DateTime(epDate.year, epDate.month, epDate.day)
                       .isAfter(today);
-              final enabled = seasonAired && epAired;
-              return CheckboxListTile(
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: isChecked,
-                title: Text(line),
-                subtitle: () {
-                  // Show availability helper when episode isn't aired yet or T.B.A.
-                  if (!enabled) {
-                    final when = epDateStr.isNotEmpty ? epDateStr : 'T.B.A.';
-                    return Text('Available $when');
+
+              // Inference rule: if an episode has no release date but lies between
+              // two episodes that have already aired, consider it released.
+              bool inferredAiredBetween = false;
+              if (!epAired && epDateStr.isEmpty && airDates != null && airDates!.isNotEmpty) {
+                bool hasPrevAired = false;
+                for (int j = idx - 1; j >= 0; j--) {
+                  final s = airDates![j];
+                  if (s.isEmpty) continue;
+                  final dt = DateTime.tryParse(s);
+                  if (dt == null) continue;
+                  final day = DateTime(dt.year, dt.month, dt.day);
+                  hasPrevAired = !day.isAfter(today);
+                  break; // only the nearest previous known date matters
+                }
+                bool hasNextAired = false;
+                for (int j = idx + 1; j < airDates!.length; j++) {
+                  final s = airDates![j];
+                  if (s.isEmpty) continue;
+                  final dt = DateTime.tryParse(s);
+                  if (dt == null) continue;
+                  final day = DateTime(dt.year, dt.month, dt.day);
+                  hasNextAired = !day.isAfter(today);
+                  break; // only the nearest next known date matters
+                }
+                inferredAiredBetween = hasPrevAired && hasNextAired;
+              }
+
+              final enabled = seasonAired && (epAired || inferredAiredBetween);
+        final host = context.findAncestorStateOfType<_ShowDetailPageState>();
+        final settings = SettingsScope.of(context);
+        final singleEp = settings.singleOpenEpisodes;
+        final expanded = singleEp
+          ? (host?._openEpisodePerSeason[season.seasonNumber] == epNum)
+          : (host?._openEpisodesMulti[season.seasonNumber]?.contains(epNum) ?? false);
+              return _EpisodeTile(
+                show: show,
+                season: season,
+                episodeNumber: epNum,
+                line: line,
+                isChecked: isChecked,
+                enabled: enabled,
+                epDateStr: epDateStr,
+                expanded: expanded,
+                onEpisodeToggle: onEpisodeToggle,
+                onExpandToggle: () async {
+                  if (host == null) return;
+                  final singleEp = SettingsScope.of(context).singleOpenEpisodes;
+                  if (singleEp) {
+                    final current = host._openEpisodePerSeason[season.seasonNumber];
+                    if (current == epNum) {
+                      host.setOpenEpisode(season.seasonNumber, null);
+                      return;
+                    }
+                    final hasMeta = host._episodeOverviews[season.seasonNumber]?.containsKey(epNum) ?? false;
+                    if (!hasMeta) {
+                      await host._ensureEpisodeMeta(season.seasonNumber, epNum);
+                    }
+                    host.setOpenEpisode(season.seasonNumber, epNum);
+                  } else {
+                    // Multi-open: toggle membership in set
+                    final set = host._openEpisodesMulti.putIfAbsent(season.seasonNumber, () => <int>{});
+                    final willOpen = !set.contains(epNum);
+                    if (willOpen) {
+                      final hasMeta = host._episodeOverviews[season.seasonNumber]?.containsKey(epNum) ?? false;
+                      if (!hasMeta) {
+                        await host._ensureEpisodeMeta(season.seasonNumber, epNum);
+                      }
+                      set.add(epNum);
+                    } else {
+                      set.remove(epNum);
+                    }
+                    host._rebuild();
                   }
-                  // Otherwise, show the date if present, or nothing
-                  if (epDateStr.isNotEmpty) return Text(epDateStr);
-                  return null;
-                }(),
-                onChanged: enabled ? (v) => onEpisodeToggle(epNum, v ?? false) : null,
+                },
               );
             }),
         ],
       ),
+    );
+  }
+}
+
+class _EpisodeTile extends StatelessWidget {
+  const _EpisodeTile({
+    required this.show,
+    required this.season,
+    required this.episodeNumber,
+    required this.line,
+    required this.isChecked,
+    required this.enabled,
+    required this.epDateStr,
+    required this.onEpisodeToggle,
+    required this.onExpandToggle,
+    required this.expanded,
+  });
+  final Show show;
+  final Season season;
+  final int episodeNumber;
+  final String line;
+  final bool isChecked;
+  final bool enabled;
+  final String epDateStr;
+  final void Function(int episodeNumber, bool newValue) onEpisodeToggle;
+  final VoidCallback onExpandToggle;
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final host = context.findAncestorStateOfType<_ShowDetailPageState>();
+    final overview = host?._episodeOverviews[season.seasonNumber]?[episodeNumber] ?? '';
+    final rating = host?._episodeRatings[season.seasonNumber]?[episodeNumber] ?? 0.0;
+    final directors = host?._episodeDirectors[season.seasonNumber]?[episodeNumber] ?? const <String>[];
+    final hasMeta = overview.isNotEmpty || rating > 0 || directors.isNotEmpty;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Checkbox(
+                value: isChecked,
+                onChanged: enabled ? (v) => onEpisodeToggle(episodeNumber, v ?? false) : null,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.standard,
+              ),
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: onExpandToggle,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+        Text(
+          line,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            // Grey out unreleased episodes while keeping them expandable
+            color: !enabled
+            ? (Theme.of(context).disabledColor)
+            : null,
+          ),
+        ),
+                        if (!enabled)
+                          Text('Available ${epDateStr.isNotEmpty ? epDateStr : 'T.B.A.'}',
+                              style: Theme.of(context).textTheme.bodySmall),
+                        if (enabled && epDateStr.isNotEmpty)
+                          Text(epDateStr, style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                iconSize: 24,
+                padding: const EdgeInsets.all(4),
+                visualDensity: VisualDensity.compact,
+                icon: Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
+                onPressed: onExpandToggle,
+              ),
+            ],
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.only(left: 52, right: 8, bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (directors.isNotEmpty)
+                  Text('Director${directors.length > 1 ? 's' : ''}: ${directors.join(', ')}',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
+                if (rating > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star_rate_rounded, size: 16, color: Color(0xFFFFC107)),
+                        const SizedBox(width: 4),
+                        Text(rating.toStringAsFixed(1), style: Theme.of(context).textTheme.labelSmall),
+                      ],
+                    ),
+                  ),
+                if (overview.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(overview, style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                if (!hasMeta)
+                  Text('No details available.', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        const Divider(height: 1),
+      ],
     );
   }
 }
