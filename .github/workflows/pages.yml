@@ -22,11 +22,20 @@ jobs:
           # Avoid pulling the vendored Flutter SDK or any submodules; we install Flutter separately.
           submodules: false
           fetch-depth: 1
-          # Exclude the large `flutter` directory which is tracked as a submodule/vendor in this repo.
+          # Exclude the large `flutter` directory (pattern-based sparse checkout in non-cone mode).
+          # Note: Use pattern mode to allow exclusion patterns (the '!' rule).
           sparse-checkout: |
             /*
-            !/flutter
-          sparse-checkout-cone: false
+            !/flutter/
+          sparse-checkout-cone-mode: false
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -42,6 +51,10 @@ jobs:
         run: |
           flutter config --enable-web
           flutter pub get
+
+      - name: Show dependency sizes (debug)
+        run: |
+          du -sh ~/.pub-cache/* | sort -h | tail -n 25 || true
 
       - name: Build (base-href must match repo name + case)
         run: |
