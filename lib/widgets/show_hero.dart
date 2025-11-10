@@ -26,6 +26,8 @@ class ShowHero extends StatefulWidget {
     this.allowUnderPosterPx = 44.0, // your default peek under poster
     this.sideFillColor, // optional manual override (esp. for Web)
     this.edgeFadePx = 30.0, // NEW: fade width on each side (logical px)
+    this.rightContent, // optional: content column to the right of the poster
+    this.bottomOverlay, // optional: content anchored to bottom (e.g., text panel)
   });
 
   final Show show;
@@ -50,6 +52,8 @@ class ShowHero extends StatefulWidget {
 
   /// NEW: how wide (in logical px) the fade should be on each horizontal side of the backdrop.
   final double edgeFadePx;
+  final Widget? rightContent; // Optional content shown to the right of the poster
+  final Widget? bottomOverlay; // Optional content shown at the bottom overlay
 
   @override
   State<ShowHero> createState() => _ShowHeroState();
@@ -361,11 +365,35 @@ class _ShowHeroState extends State<ShowHero> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Expanded(child: SizedBox.shrink()),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: widget.rightContent ?? const SizedBox.shrink(),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
+
+          // Bottom overlay: only as wide as needed (wrap content), but capped to available width
+          if (widget.bottomOverlay != null)
+            Positioned(
+              left: widget.horizontalPadding + widget.posterWidth + 16,
+              bottom: 10,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Compute the max width remaining to the right edge honoring right padding
+                  final screenW = MediaQuery.of(context).size.width;
+                  final leftX = widget.horizontalPadding + widget.posterWidth + 16;
+                  final maxW = (screenW - leftX - widget.horizontalPadding).clamp(0.0, screenW);
+                  return ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxW),
+                    child: widget.bottomOverlay!,
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );

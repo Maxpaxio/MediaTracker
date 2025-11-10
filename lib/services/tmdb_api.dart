@@ -385,6 +385,44 @@ class TmdbApi {
 
   // ---------------- EPISODE TITLES (per season) ----------------
 
+  /// Watch providers for a specific TV season (streaming only: flatrate/free/ads).
+  /// Returns the set of streaming provider IDs available for [seasonNumber] in [region].
+  Future<Set<int>> fetchSeasonStreamingProviders(
+      int showId, int seasonNumber, String region) async {
+    final uri = Uri.parse('$_base/tv/$showId/season/$seasonNumber/watch/providers')
+        .replace(queryParameters: {'api_key': _key});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return <int>{};
+    final root = (json.decode(res.body) as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final results = (root['results'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final picked =
+        (results[region.toUpperCase()] as Map?)?.cast<String, dynamic>();
+  if (picked == null) return <int>{};
+
+    List<Map<String, dynamic>> norm(String key) {
+      final raw = (picked[key] as List?) ?? const [];
+      return raw
+          .map<Map<String, dynamic>>(
+              (e) => (e as Map?)?.cast<String, dynamic>() ?? const {})
+          .toList();
+    }
+
+    final ids = <int>{};
+    void add(List<Map<String, dynamic>> l) {
+      for (final m in l) {
+        final id = (m['provider_id'] as num?)?.toInt() ?? -1;
+        if (id > 0) ids.add(id);
+      }
+    }
+
+    add(norm('flatrate'));
+    add(norm('free'));
+    add(norm('ads'));
+    return ids;
+  }
+
   /// Fetch episode titles for a season (language en-US).
   /// Returns a list of titles indexed by (episodeNumber - 1).
   Future<List<String>> fetchSeasonEpisodeTitles(
@@ -444,6 +482,51 @@ class TmdbApi {
       final date = (em['air_date'] as String?) ?? '';
       return date;
     }).toList(growable: false);
+  }
+
+  // ---------------- EPISODE DETAILS & CREDITS ----------------
+
+  /// Fetch a specific episode's overview and rating (vote_average).
+  Future<({String overview, double rating})> fetchEpisodeDetails(
+      int showId, int seasonNumber, int episodeNumber) async {
+    final uri = Uri.parse('$_base/tv/$showId/season/$seasonNumber/episode/$episodeNumber')
+        .replace(queryParameters: {'api_key': _key, 'language': 'en-US'});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      return (overview: '', rating: 0.0);
+    }
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    final overview = (m['overview'] as String?) ?? '';
+    final rating = (m['vote_average'] as num?)?.toDouble() ?? 0.0;
+    return (overview: overview, rating: rating);
+  }
+
+  /// Fetch a specific episode's directors (from credits endpoint).
+  Future<List<String>> fetchEpisodeDirectors(
+      int showId, int seasonNumber, int episodeNumber) async {
+    final uri = Uri.parse('$_base/tv/$showId/season/$seasonNumber/episode/$episodeNumber/credits')
+        .replace(queryParameters: {'api_key': _key});
+    final res = await http.get(uri);
+    if (res.statusCode != 200) return const <String>[];
+    final m = (json.decode(res.body) as Map).cast<String, dynamic>();
+    final crew = (m['crew'] as List?) ?? const [];
+    final names = <String>[];
+    for (final e in crew) {
+      final mm = (e as Map?)?.cast<String, dynamic>() ?? const {};
+      final job = (mm['job'] as String?)?.toLowerCase() ?? '';
+      final dept = (mm['department'] as String?)?.toLowerCase() ?? '';
+      if (job == 'director' || (dept == 'directing' && job.contains('director'))) {
+        final name = (mm['name'] as String?) ?? '';
+        if (name.isNotEmpty) names.add(name);
+      }
+    }
+    // Deduplicate while preserving order
+    final seen = <String>{};
+    final out = <String>[];
+    for (final n in names) {
+      if (seen.add(n)) out.add(n);
+    }
+    return out;
   }
 
   // ---------------- MORE INFO (creators/companies/runtime) ----------------

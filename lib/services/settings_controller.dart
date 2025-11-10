@@ -9,11 +9,15 @@ class SettingsController extends ChangeNotifier {
   static const _kRegionOverrideKey = 'settings.regionOverride';
   static const _kCachedGeoRegionKey = 'settings.cachedGeoRegion';
   static const _kCachedGeoTimestampKey = 'settings.cachedGeoTimestamp';
+  static const _kSingleOpenSeasonsKey = 'settings.singleOpenSeasons';
+  static const _kSingleOpenEpisodesKey = 'settings.singleOpenEpisodes';
   static const _kGeoTtl = Duration(days: 3); // refresh every few days
 
   SharedPreferences? _prefs;
   String? _regionOverride; // Explicit user choice (e.g. 'US')
   String? _cachedGeoRegion; // From IP geolocation
+  bool _singleOpenSeasons = true; // default ON
+  bool _singleOpenEpisodes = true; // default ON
 
   String? get regionOverride => _regionOverride;
 
@@ -25,11 +29,15 @@ class SettingsController extends ChangeNotifier {
       _regionOverride ?? _cachedGeoRegion ?? tryDetectRegionCode();
 
   bool get hasExplicitOverride => _regionOverride != null;
+  bool get singleOpenSeasons => _singleOpenSeasons;
+  bool get singleOpenEpisodes => _singleOpenEpisodes;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     _regionOverride = _prefs!.getString(_kRegionOverrideKey);
     _cachedGeoRegion = _prefs!.getString(_kCachedGeoRegionKey);
+  _singleOpenSeasons = _prefs!.getBool(_kSingleOpenSeasonsKey) ?? true;
+  _singleOpenEpisodes = _prefs!.getBool(_kSingleOpenEpisodesKey) ?? true;
     final tsMillis = _prefs!.getInt(_kCachedGeoTimestampKey);
     if (tsMillis != null) {
       final ts = DateTime.fromMillisecondsSinceEpoch(tsMillis);
@@ -50,6 +58,20 @@ class SettingsController extends ChangeNotifier {
     } else {
       await _prefs!.setString(_kRegionOverrideKey, _regionOverride!);
     }
+    notifyListeners();
+  }
+
+  Future<void> setSingleOpenSeasons(bool value) async {
+    _singleOpenSeasons = value;
+    if (_prefs == null) _prefs = await SharedPreferences.getInstance();
+    await _prefs!.setBool(_kSingleOpenSeasonsKey, _singleOpenSeasons);
+    notifyListeners();
+  }
+
+  Future<void> setSingleOpenEpisodes(bool value) async {
+    _singleOpenEpisodes = value;
+    if (_prefs == null) _prefs = await SharedPreferences.getInstance();
+    await _prefs!.setBool(_kSingleOpenEpisodesKey, _singleOpenEpisodes);
     notifyListeners();
   }
 
