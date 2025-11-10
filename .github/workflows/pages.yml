@@ -18,6 +18,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Avoid pulling the vendored Flutter SDK or any submodules; we install Flutter separately.
+          submodules: false
+          fetch-depth: 1
+          # Exclude the large `flutter` directory which is tracked as a submodule/vendor in this repo.
+          sparse-checkout: |
+            /*
+            !/flutter
+          sparse-checkout-cone: false
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
